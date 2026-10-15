@@ -14,36 +14,36 @@ jobs:
           Write-Host "Initiating aggressive cleanup. Protecting RDP and Network configurations..."
           
           # 1. Remove heavy developer tools and directories to save ~40GB space
-          if (Test-Path "C:\Program Files\Microsoft Visual Studio") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files\Microsoft Visual Studio" }
-          if (Test-Path "C:\Program Files (x86)\Microsoft Visual Studio") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files (x86)\Microsoft Visual Studio" }
-          if (Test-Path "C:\Program Files\Microsoft SQL Server") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files\Microsoft SQL Server" }
-          if (Test-Path "C:\Program Files (x86)\Microsoft SQL Server") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files (x86)\Microsoft SQL Server" }
-          if (Test-Path "C:\Program Files\dotnet") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files\dotnet" }
-          if (Test-Path "C:\Program Files (x86)\Microsoft SDKs") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files (x86)\Microsoft SDKs" }
-          if (Test-Path "C:\android") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\android" }
-          if (Test-Path "C:\Selenium") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Selenium" }
-          if (Test-Path "C:\HostedToolcache") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\HostedToolcache" }
-          if (Test-Path "C:\hostedtoolcache") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\hostedtoolcache" }
-          if (Test-Path "C:\Program Files\Java") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files\Java" }
-          if (Test-Path "C:\Program Files\Go") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files\Go" }
-          if (Test-Path "C:\tools\php") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\tools\php" }
-          if (Test-Path "C:\tools\pypy") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\tools\pypy" }
+          if (Test-Path "C:\\Program Files\\Microsoft Visual Studio") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\Program Files\\Microsoft Visual Studio" }
+          if (Test-Path "C:\\Program Files (x86)\\Microsoft Visual Studio") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\Program Files (x86)\\Microsoft Visual Studio" }
+          if (Test-Path "C:\\Program Files\\Microsoft SQL Server") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\Program Files\\Microsoft SQL Server" }
+          if (Test-Path "C:\\Program Files (x86)\\Microsoft SQL Server") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\Program Files (x86)\\Microsoft SQL Server" }
+          if (Test-Path "C:\\Program Files\\dotnet") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\Program Files\\dotnet" }
+          if (Test-Path "C:\\Program Files (x86)\\Microsoft SDKs") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\Program Files (x86)\\Microsoft SDKs" }
+          if (Test-Path "C:\\android") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\android" }
+          if (Test-Path "C:\\Selenium") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\Selenium" }
+          if (Test-Path "C:\\HostedToolcache") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\HostedToolcache" }
+          if (Test-Path "C:\\hostedtoolcache") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\hostedtoolcache" }
+          if (Test-Path "C:\\Program Files\\Java") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\Program Files\\Java" }
+          if (Test-Path "C:\\Program Files\\Go") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\Program Files\\Go" }
+          if (Test-Path "C:\\tools\\php") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\tools\\php" }
+          if (Test-Path "C:\\tools\\pypy") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\\tools\\pypy" }
 
           # 2. Purge system caches using native DISM tool and clear temp folders
           Write-Host "Purging system caches and temporary directories..."
           Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
-          Get-ChildItem -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          Get-ChildItem -Path "C:\\Windows\\Temp\\*" -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
           Write-Host "Aggressive cleanup accomplished! System is fully optimized for pure RDP performance."
 
       - name: Configure Core RDP Settings
         run: |
           # Enable Remote Desktop and disable Network Level Authentication (if needed)
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+          Set-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server' `
                              -Name "fDenyTSConnections" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+          Set-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp' `
                              -Name "UserAuthentication" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+          Set-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp' `
                              -Name "SecurityLayer" -Value 0 -Force
 
           # Remove any existing rule with the same name to avoid duplication
@@ -82,7 +82,7 @@ jobs:
       - name: Install Tailscale
         run: |
           \$tsUrl = "https://tailscale.com"
-          installerPath = "env:TEMP\tailscale.msi"
+          installerPath = "env:TEMP\\tailscale.msi"
 
           Invoke-WebRequest -Uri tsUrl -OutFile installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
@@ -91,12 +91,12 @@ jobs:
       - name: Establish Tailscale Connection
         run: |
           # Bring up Tailscale with the provided auth key and set a unique hostname
-          & "\$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=\({{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-\)env:GITHUB_RUN_ID
+          & "\$env:ProgramFiles\\Tailscale\\tailscale.exe" up --authkey=\({{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-\)env:GITHUB_RUN_ID
 
           # Wait for Tailscale to assign an IP
           \$tsIP = \(null\)retries = 0
           while (-not tsIP -and retries -lt 10) {
-              \(tsIP = & "\)env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+              \(tsIP = & "\)env:ProgramFiles\\Tailscale\\tailscale.exe" ip -4
               Start-Sleep -Seconds 5
               \$retries++
           }
@@ -132,4 +132,3 @@ jobs:
               Write-Host "[\$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
               Start-Sleep -Seconds 300
           }
-          
