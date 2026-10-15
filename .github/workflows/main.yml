@@ -50,7 +50,7 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004"
 
-          echo "RDP_CREDS=User: ERROR-4004 | Password: pass >> $env:GITHUB_ENV
+          echo "RDP_CREDS=User: ERROR-4004 | Password: pass
 
           if (-not (Get-LocalUser -Name "ERROR-4004")) {
               Write-Error "User creation failed"
