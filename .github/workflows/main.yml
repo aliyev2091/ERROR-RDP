@@ -29,14 +29,14 @@ jobs:
           if (Test-Path "C:\tools\php") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\tools\php" }
           if (Test-Path "C:\tools\pypy") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\tools\pypy" }
 
-          # 2. Purge system caches and deep temporary files
+          # 2. Purge system caches using native DISM tool and clear temp folders
           Write-Host "Purging system caches and temporary directories..."
-          Clear-ComponentStore -ErrorAction SilentlyContinue
+          Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
           Get-ChildItem -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
           # 3. Strip non-essential Windows Bloatware apps (Protecting Core Terminal, Store, and Calculator)
           Write-Host "Stripping non-essential Windows Bloatware apps..."
-          Get-AppxPackage -AllUsers | Where-Object {\$_.Name -notlike "*WindowsStore*" -and \(_.Name -notlike "*Calculator*" -and \)_.Name -notlike "*Terminal*"} | Remove-AppxPackage -ErrorAction SilentlyContinue
+          Get-AppxPackage -AllUsers | Where-Object {\(_ -and\)_.Name -notlike "*WindowsStore*" -and \(_.Name -notlike "*Calculator*" -and \)_.Name -notlike "*Terminal*"} | Remove-AppxPackage -ErrorAction SilentlyContinue
 
           Write-Host "Aggressive cleanup accomplished! System is fully optimized for pure RDP performance."
 
@@ -71,12 +71,12 @@ jobs:
                          [char[]](91..96) + [char[]](123..126)) # Special characters
           }
           \(rawPassword = @()\)rawPassword += \(charSet.Upper \vert{} Get-Random -Count 4\)rawPassword += \(charSet.Lower \vert{} Get-Random -Count 4\)rawPassword += \(charSet.Number \vert{} Get-Random -Count 4\)rawPassword += \(charSet.Special \vert{} Get-Random -Count 4\)password = "Password!?"
-          \(securePass = ConvertTo-SecureString\)password -AsPlainText -Force
+          securePass = ConvertTo-SecureString password -AsPlainText -Force
           New-LocalUser -Name "ERROR-4004" -Password \$securePass -AccountNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004"
 
-          echo "RDP_CREDS=User: ERROR-4004 | Password: \(password" >> \)env:GITHUB_ENV
+          echo "RDP_CREDS=User: ERROR-4004 | Password: password" >> env:GITHUB_ENV
 
           if (-not (Get-LocalUser -Name "ERROR-4004")) {
               Write-Error "User creation failed"
@@ -86,9 +86,9 @@ jobs:
       - name: Install Tailscale
         run: |
           \$tsUrl = "https://tailscale.com"
-          \(installerPath = "\)env:TEMP\tailscale.msi"
+          installerPath = "env:TEMP\tailscale.msi"
 
-          Invoke-WebRequest -Uri \(tsUrl -OutFile\)installerPath
+          Invoke-WebRequest -Uri tsUrl -OutFile installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
           Remove-Item \$installerPath -Force
 
@@ -99,7 +99,7 @@ jobs:
 
           # Wait for Tailscale to assign an IP
           \$tsIP = \(null\)retries = 0
-          while (-not \(tsIP -and\)retries -lt 10) {
+          while (-not tsIP -and retries -lt 10) {
               \(tsIP = & "\)env:ProgramFiles\Tailscale\tailscale.exe" ip -4
               Start-Sleep -Seconds 5
               \$retries++
@@ -109,14 +109,14 @@ jobs:
               Write-Error "Tailscale IP not assigned. Exiting."
               exit 1
           }
-          echo "TAILSCALE_IP=\(tsIP" >> \)env:GITHUB_ENV
+          echo "TAILSCALE_IP=tsIP" >> env:GITHUB_ENV
 
       - name: Verify RDP Accessibility
         run: |
           Write-Host "Tailscale IP: \$env:TAILSCALE_IP"
 
           # Test connectivity using Test-NetConnection against the Tailscale IP on port 3389
-          \(testResult = Test-NetConnection -ComputerName\)env:TAILSCALE_IP -Port 3389
+          testResult = Test-NetConnection -ComputerName env:TAILSCALE_IP -Port 3389
           if (-not \$testResult.TcpTestSucceeded) {
               Write-Error "TCP connection to RDP port 3389 failed"
               exit 1
@@ -136,3 +136,4 @@ jobs:
               Write-Host "[\$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
               Start-Sleep -Seconds 300
           }
+          
