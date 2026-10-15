@@ -9,50 +9,37 @@ jobs:
     timeout-minutes: 3600
 
     steps:
-          - name: Hardcore Performance Optimization and Deep Cleanup
+      - name: Hardcore Performance Optimization and Deep Cleanup
         run: |
           Write-Host "Initiating aggressive cleanup. Protecting RDP and Network configurations..."
+          
+          # 1. Remove heavy developer tools and directories to save ~40GB space
+          if (Test-Path "C:\Program Files\Microsoft Visual Studio") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files\Microsoft Visual Studio" }
+          if (Test-Path "C:\Program Files (x86)\Microsoft Visual Studio") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files (x86)\Microsoft Visual Studio" }
+          if (Test-Path "C:\Program Files\Microsoft SQL Server") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files\Microsoft SQL Server" }
+          if (Test-Path "C:\Program Files (x86)\Microsoft SQL Server") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files (x86)\Microsoft SQL Server" }
+          if (Test-Path "C:\Program Files\dotnet") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files\dotnet" }
+          if (Test-Path "C:\Program Files (x86)\Microsoft SDKs") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files (x86)\Microsoft SDKs" }
+          if (Test-Path "C:\android") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\android" }
+          if (Test-Path "C:\Selenium") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Selenium" }
+          if (Test-Path "C:\HostedToolcache") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\HostedToolcache" }
+          if (Test-Path "C:\hostedtoolcache") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\hostedtoolcache" }
+          if (Test-Path "C:\Program Files\Java") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files\Java" }
+          if (Test-Path "C:\Program Files\Go") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files\Go" }
+          if (Test-Path "C:\tools\php") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\tools\php" }
+          if (Test-Path "C:\tools\pypy") { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\tools\pypy" }
 
-          # 1. Kill and remove heavy developer tools and languages (Save ~35-40GB)
-          \$heavyPaths = @(
-              "C:\Program Files\Microsoft Visual Studio",
-              "C:\Program Files (x86)\Microsoft Visual Studio",
-              "C:\Program Files\Microsoft SQL Server",
-              "C:\Program Files (x86)\Microsoft SQL Server",
-              "C:\Program Files\dotnet",
-              "C:\Program Files (x86)\Microsoft SDKs",
-              "C:\android",
-              "C:\Selenium",
-              "C:\HostedToolcache",
-              "C:\hostedtoolcache",
-              "C:\Program Files\Java",
-              "C:\Program Files\Go",
-              "C:\tools\php",
-              "C:\tools\pypy"
-          )
-
-          foreach (\$path in \$heavyPaths) {
-              if (Test-Path \$path) {
-                  Write-Host "Removing: \$path"
-                  Remove-Item -Recurse -Force -ErrorAction SilentlyContinue \$path
-              }
-          }
-
-          # 2. Deep clean Windows Component Store and Temp directory (Save ~5GB)
-          Write-Host "Purging system caches and deep temporary files..."
+          # 2. Purge system caches and deep temporary files
+          Write-Host "Purging system caches and temporary directories..."
           Clear-ComponentStore -ErrorAction SilentlyContinue
           Get-ChildItem -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
-          # 3. Clean up non-essential built-in UWP packages (Except Core System / Store)
+          # 3. Strip non-essential Windows Bloatware apps (Protecting Core Terminal, Store, and Calculator)
           Write-Host "Stripping non-essential Windows Bloatware apps..."
-          Get-AppxPackage -AllUsers | Where-Object {
-              \$_.Name -notlike "*WindowsStore*" -and 
-              \$_.Name -notlike "*Calculator*" -and 
-              \$_.Name -notlike "*Terminal*"
-          } | Remove-AppxPackage -ErrorAction SilentlyContinue
+          Get-AppxPackage -AllUsers | Where-Object {\$_.Name -notlike "*WindowsStore*" -and \(_.Name -notlike "*Calculator*" -and \)_.Name -notlike "*Terminal*"} | Remove-AppxPackage -ErrorAction SilentlyContinue
 
           Write-Host "Aggressive cleanup accomplished! System is fully optimized for pure RDP performance."
-          
+
       - name: Configure Core RDP Settings
         run: |
           # Enable Remote Desktop and disable Network Level Authentication (if needed)
@@ -76,25 +63,20 @@ jobs:
       - name: Create RDP User with Secure Password
         run: |
           Add-Type -AssemblyName System.Security
-          $charSet = @{
+          \$charSet = @{
               Upper   = [char[]](65..90)      # A-Z
               Lower   = [char[]](97..122)     # a-z
               Number  = [char[]](48..57)      # 0-9
               Special = ([char[]](33..47) + [char[]](58..64) +
                          [char[]](91..96) + [char[]](123..126)) # Special characters
           }
-          $rawPassword = @()
-          $rawPassword += $charSet.Upper | Get-Random -Count 4
-          $rawPassword += $charSet.Lower | Get-Random -Count 4
-          $rawPassword += $charSet.Number | Get-Random -Count 4
-          $rawPassword += $charSet.Special | Get-Random -Count 4
-          $password = "Password!?"
-          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-          New-LocalUser -Name "ERROR-4004" -Password $securePass -AccountNeverExpires
+          \(rawPassword = @()\)rawPassword += \(charSet.Upper \vert{} Get-Random -Count 4\)rawPassword += \(charSet.Lower \vert{} Get-Random -Count 4\)rawPassword += \(charSet.Number \vert{} Get-Random -Count 4\)rawPassword += \(charSet.Special \vert{} Get-Random -Count 4\)password = "Password!?"
+          \(securePass = ConvertTo-SecureString\)password -AsPlainText -Force
+          New-LocalUser -Name "ERROR-4004" -Password \$securePass -AccountNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004"
 
-          echo "RDP_CREDS=User: ERROR-4004 | Password: $password" >> $env:GITHUB_ENV
+          echo "RDP_CREDS=User: ERROR-4004 | Password: \(password" >> \)env:GITHUB_ENV
 
           if (-not (Get-LocalUser -Name "ERROR-4004")) {
               Write-Error "User creation failed"
@@ -103,40 +85,39 @@ jobs:
 
       - name: Install Tailscale
         run: |
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-          $installerPath = "$env:TEMP\tailscale.msi"
+          \$tsUrl = "https://tailscale.com"
+          \(installerPath = "\)env:TEMP\tailscale.msi"
 
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+          Invoke-WebRequest -Uri \(tsUrl -OutFile\)installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
-          Remove-Item $installerPath -Force
+          Remove-Item \$installerPath -Force
 
       - name: Establish Tailscale Connection
         run: |
           # Bring up Tailscale with the provided auth key and set a unique hostname
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+          & "\$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=\({{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-\)env:GITHUB_RUN_ID
 
           # Wait for Tailscale to assign an IP
-          $tsIP = $null
-          $retries = 0
-          while (-not $tsIP -and $retries -lt 10) {
-              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+          \$tsIP = \(null\)retries = 0
+          while (-not \(tsIP -and\)retries -lt 10) {
+              \(tsIP = & "\)env:ProgramFiles\Tailscale\tailscale.exe" ip -4
               Start-Sleep -Seconds 5
-              $retries++
+              \$retries++
           }
 
-          if (-not $tsIP) {
+          if (-not \$tsIP) {
               Write-Error "Tailscale IP not assigned. Exiting."
               exit 1
           }
-          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+          echo "TAILSCALE_IP=\(tsIP" >> \)env:GITHUB_ENV
 
       - name: Verify RDP Accessibility
         run: |
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
+          Write-Host "Tailscale IP: \$env:TAILSCALE_IP"
 
           # Test connectivity using Test-NetConnection against the Tailscale IP on port 3389
-          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
-          if (-not $testResult.TcpTestSucceeded) {
+          \(testResult = Test-NetConnection -ComputerName\)env:TAILSCALE_IP -Port 3389
+          if (-not \$testResult.TcpTestSucceeded) {
               Write-Error "TCP connection to RDP port 3389 failed"
               exit 1
           }
@@ -151,7 +132,7 @@ jobs:
           Write-Host "==================`n"
 
           # Keep runner active indefinitely (or until manually cancelled)
-          while ($true) {
-              Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
+          while (\$true) {
+              Write-Host "[\$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
               Start-Sleep -Seconds 300
           }
