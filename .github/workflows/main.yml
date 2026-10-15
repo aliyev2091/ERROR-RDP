@@ -34,10 +34,6 @@ jobs:
           Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
           Get-ChildItem -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
-          # 3. Strip non-essential Windows Bloatware apps (Protecting Core Terminal, Store, and Calculator)
-          Write-Host "Stripping non-essential Windows Bloatware apps..."
-          Get-AppxPackage -AllUsers | Where-Object {\(_ -and\)_.Name -notlike "*WindowsStore*" -and \(_.Name -notlike "*Calculator*" -and \)_.Name -notlike "*Terminal*"} | Remove-AppxPackage -ErrorAction SilentlyContinue
-
           Write-Host "Aggressive cleanup accomplished! System is fully optimized for pure RDP performance."
 
       - name: Configure Core RDP Settings
