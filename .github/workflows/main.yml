@@ -115,14 +115,11 @@ jobs:
           try {
               $cs = Get-CimInstance -ClassName Win32_ComputerSystem
               Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile = $false}
-              
               $pagefile = Get-CimInstance -ClassName Win32_PageFileSetting -Filter "Name='C:\\pagefile.sys'" -ErrorAction SilentlyContinue
               if ($pagefile) {
                   Set-CimInstance -InputObject $pagefile -Property @{InitialSize = 512; MaximumSize = 1024}
               }
-          } catch {
-              Write-Host "Pagefile ayarı atlandı"
-          }
+          } catch {}
 
           powercfg /h off 2>$null
           Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase 2>$null
@@ -170,51 +167,53 @@ jobs:
       - name: Install Tailscale
         run: |
           $ProgressPreference = 'SilentlyContinue'
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
-          $installerPath = "$env:TEMP\tailscale.msi"
-          
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath -UseBasicParsing
-          
-          $process = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$installerPath`" /qn /norestart ALLUSERS=1" -Wait -PassThru
-          Write-Host "MSI Exit Code: $($process.ExitCode)"
-          
-          Start-Sleep -Seconds 15
-          
-          # Olası tüm yerleri tara
-          $tsExe = Get-ChildItem -Path "C:\Program Files","C:\Program Files (x86)","C:\ProgramData" -Filter "tailscale.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          
+          $msi = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi -UseBasicParsing
+          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart ALLUSERS=1" -Wait -NoNewWindow
+          Start-Sleep -Seconds 20
+
+          $tsExe = $null
+          $searchPaths = @(
+            "C:\Program Files\Tailscale",
+            "C:\Program Files (x86)\Tailscale",
+            "C:\ProgramData\Tailscale"
+          )
+          foreach ($path in $searchPaths) {
+              if (Test-Path $path) {
+                  $found = Get-ChildItem -Path $path -Filter "tailscale.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                  if ($found) {
+                      $tsExe = $found.FullName
+                      break
+                  }
+              }
+          }
+
           if (-not $tsExe) {
-              # Servis üzerinden dene
-              Start-Service -Name "Tailscale" -ErrorAction SilentlyContinue
-              Start-Sleep -Seconds 5
               $tsExe = Get-ChildItem -Path "C:\Program Files","C:\Program Files (x86)" -Filter "tailscale.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
           }
-          
+
           if (-not $tsExe) {
               Write-Error "Tailscale executable not found after install"
-              Get-ChildItem "C:\Program Files" -ErrorAction SilentlyContinue | Select-Object Name
               exit 1
           }
-          
+
           echo "TAILSCALE_EXE=$tsExe" >> $env:GITHUB_ENV
           Write-Host "Tailscale found at: $tsExe"
 
       - name: Establish Tailscale Connection
         run: |
           $tsExe = $env:TAILSCALE_EXE
-          if (-not $tsExe -or -not (Test-Path $tsExe)) {
+          if (-not (Test-Path $tsExe)) {
               Write-Error "Tailscale executable not found"
               exit 1
           }
 
-          & "$tsExe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID --accept-routes=false
+          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
 
           $tsIP = $null
           $retries = 0
           while (-not $tsIP -and $retries -lt 20) {
-              try {
-                  $tsIP = & "$tsExe" ip -4 2>$null
-              } catch {}
+              $tsIP = & $tsExe ip -4 2>$null
               Start-Sleep -Seconds 4
               $retries++
           }
