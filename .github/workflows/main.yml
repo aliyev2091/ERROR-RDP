@@ -166,68 +166,32 @@ jobs:
 
       - name: Install Tailscale
         run: |
-          $ProgressPreference = 'SilentlyContinue'
-          $msi = "$env:TEMP\tailscale.msi"
-          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi -UseBasicParsing
-          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart ALLUSERS=1" -Wait -NoNewWindow
-          Start-Sleep -Seconds 20
-
-          $tsExe = $null
-          $searchPaths = @(
-            "C:\Program Files\Tailscale",
-            "C:\Program Files (x86)\Tailscale",
-            "C:\ProgramData\Tailscale"
-          )
-          foreach ($path in $searchPaths) {
-              if (Test-Path $path) {
-                  $found = Get-ChildItem -Path $path -Filter "tailscale.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-                  if ($found) {
-                      $tsExe = $found.FullName
-                      break
-                  }
-              }
-          }
-
-          if (-not $tsExe) {
-              $tsExe = Get-ChildItem -Path "C:\Program Files","C:\Program Files (x86)" -Filter "tailscale.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          }
-
-          if (-not $tsExe) {
-              Write-Error "Tailscale executable not found after install"
-              exit 1
-          }
-
-          echo "TAILSCALE_EXE=$tsExe" >> $env:GITHUB_ENV
-          Write-Host "Tailscale found at: $tsExe"
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
+          Remove-Item $installerPath -Force
 
       - name: Establish Tailscale Connection
         run: |
-          $tsExe = $env:TAILSCALE_EXE
-          if (-not (Test-Path $tsExe)) {
-              Write-Error "Tailscale executable not found"
-              exit 1
-          }
-
-          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
-
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
           $tsIP = $null
           $retries = 0
-          while (-not $tsIP -and $retries -lt 20) {
-              $tsIP = & $tsExe ip -4 2>$null
-              Start-Sleep -Seconds 4
+          while (-not $tsIP -and $retries -lt 10) {
+              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+              Start-Sleep -Seconds 5
               $retries++
           }
           if (-not $tsIP) {
-              Write-Error "Tailscale IP not assigned"
+              Write-Error "Tailscale IP not assigned. Exiting."
               exit 1
           }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-          Write-Host "Tailscale IP: $tsIP"
 
       - name: Verify RDP Accessibility
         run: |
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389 -WarningAction SilentlyContinue
+          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
           if (-not $testResult.TcpTestSucceeded) {
               Write-Error "TCP connection to RDP port 3389 failed"
               exit 1
