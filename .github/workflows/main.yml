@@ -24,59 +24,134 @@ jobs:
           Write-Host "Processor ID             : $($cpu.ProcessorId)"
           Write-Host "==============================================================`n" -ForegroundColor Cyan
 
-      - name: Remove Unnecessary Bloatware
+      - name: Aggressive Safe Cleanup
         run: |
-          Write-Host "`n========== REMOVING UNNECESSARY BLOATWARE ==========" -ForegroundColor Yellow
+          Write-Host "`n========== AGGRESSIVE SAFE CLEANUP STARTED ==========" -ForegroundColor Yellow
 
-          $bloatwareApps = @(
+          $safeToRemove = @(
             "Microsoft.BingWeather",
             "Microsoft.BingNews",
             "Microsoft.BingSearch",
+            "Microsoft.BingFinance",
+            "Microsoft.BingSports",
             "Microsoft.GetHelp",
             "Microsoft.Getstarted",
             "Microsoft.WindowsFeedbackHub",
             "Microsoft.MicrosoftOfficeHub",
             "Microsoft.Todos",
             "Microsoft.PowerAutomateDesktop",
+            "Microsoft.Windows.Photos",
+            "Microsoft.ScreenSketch",
+            "Microsoft.MSPaint",
+            "Microsoft.WindowsCamera",
+            "Microsoft.WindowsAlarms",
+            "Microsoft.WindowsSoundRecorder",
             "Microsoft.People",
             "Microsoft.SkypeApp",
             "Clipchamp.Clipchamp",
+            "Microsoft.Xbox*",
             "Microsoft.GamingApp",
             "Microsoft.ZuneMusic",
             "Microsoft.ZuneVideo",
             "Microsoft.YourPhone",
             "Microsoft.WindowsMaps",
             "Microsoft.MicrosoftSolitaireCollection",
-            "Microsoft.MicrosoftStickyNotes",
+            "Microsoft.549981C3F5F10",
             "MicrosoftTeams",
+            "Microsoft.OneDriveSync",
+            "Microsoft.MicrosoftStickyNotes",
+            "Microsoft.WindowsCommunicationsApps",
+            "Microsoft.Wallet",
+            "Microsoft.3DBuilder",
             "Microsoft.MixedReality.Portal",
+            "Microsoft.Microsoft3DViewer",
+            "Microsoft.Office.Sway",
+            "Microsoft.OneConnect",
+            "Microsoft.Print3D",
+            "Microsoft.NetworkSpeedTest",
+            "Microsoft.News",
+            "Microsoft.WindowsFeedbackHub",
             "Microsoft.Advertising.Xaml",
-            "Microsoft.WindowsCommunicationsApps"
+            "Microsoft.Messaging",
+            "Microsoft.OneDrive"
           )
 
-          foreach ($app in $bloatwareApps) {
-              Get-AppxPackage -Name $app -AllUsers -ErrorAction SilentlyContinue | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
+          foreach ($app in $safeToRemove) {
+              Get-AppxPackage -Name $app -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue
+              Get-AppxPackage -AllUsers -Name $app -ErrorAction SilentlyContinue | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
               Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
-                  Where-Object { $_.DisplayName -eq $app } |
+                  Where-Object { $_.DisplayName -like $app } |
                   Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
           }
 
-          $safeServicesToDisable = @(
+          taskkill /f /im OneDrive.exe 2>$null
+          if (Test-Path "$env:SystemRoot\SysWOW64\OneDriveSetup.exe") {
+              Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue
+          }
+          if (Test-Path "$env:SystemRoot\System32\OneDriveSetup.exe") {
+              Start-Process "$env:SystemRoot\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue
+          }
+
+          $servicesToDisable = @(
             "DiagTrack",
             "dmwappushservice",
+            "SysMain",
+            "WSearch",
+            "XblAuthManager",
+            "XblGameSave",
+            "XboxGipSvc",
+            "XboxNetApiSvc",
+            "WMPNetworkSvc",
+            "Fax",
+            "RemoteRegistry",
             "RetailDemo",
-            "MapsBroker"
+            "MapsBroker",
+            "WerSvc",
+            "Spooler"
           )
 
-          foreach ($svc in $safeServicesToDisable) {
+          foreach ($svc in $servicesToDisable) {
               Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
               Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
           }
 
           Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Prefetch\*" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\Public\Documents\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\Public\Downloads\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\Public\Music\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\Public\Pictures\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\Public\Videos\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Logs\CBS\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\LiveKernelReports\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Minidump\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\ProgramData\Microsoft\Windows\WER\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\*\AppData\Local\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\*\AppData\Local\Microsoft\Windows\INetCache\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\*\AppData\Local\CrashDumps\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Downloaded Program Files\*" -Recurse -Force -ErrorAction SilentlyContinue
 
-          Write-Host "========== BLOATWARE REMOVAL COMPLETED ==========`n" -ForegroundColor Green
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338389Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SoftLandingEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SystemPaneSuggestionsEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
+
+          $tasks = @(
+            "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
+            "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
+            "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
+            "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip",
+            "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector",
+            "\Microsoft\Windows\Feedback\Siuf\DmClient",
+            "\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload",
+            "\Microsoft\Windows\Windows Error Reporting\QueueReporting"
+          )
+          foreach ($task in $tasks) {
+              schtasks /Change /TN $task /Disable 2>$null
+          }
+
+          Write-Host "========== AGGRESSIVE SAFE CLEANUP COMPLETED ==========`n" -ForegroundColor Green
 
       - name: Configure Core RDP Settings
         run: |
