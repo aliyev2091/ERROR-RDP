@@ -10,25 +10,25 @@ jobs:
 
     steps:
       # ───────────────────────────────────────────────
-      # 1. İşlemci (CPU) Bilgilerini Göster
+      # 1. Show Processor Information
       # ───────────────────────────────────────────────
       - name: Show Processor Information
         run: |
-          Write-Host "`n==================== İŞLEMCİ BİLGİLERİ ====================" -ForegroundColor Cyan
+          Write-Host "`n==================== PROCESSOR INFORMATION ====================" -ForegroundColor Cyan
 
           $cpu = Get-CimInstance Win32_Processor
 
-          Write-Host "İşlemci Adı              : $($cpu.Name)"
-          Write-Host "Üretici                  : $($cpu.Manufacturer)"
-          Write-Host "Çekirdek Sayısı          : $($cpu.NumberOfCores)"
-          Write-Host "Mantıksal İşlemci (Thread): $($cpu.NumberOfLogicalProcessors)"
-          Write-Host "Maksimum Hız (MHz)       : $($cpu.MaxClockSpeed)"
-          Write-Host "Güncel Hız (MHz)         : $($cpu.CurrentClockSpeed)"
-          Write-Host "Mimari                   : $($cpu.Architecture)"
-          Write-Host "Soket                    : $($cpu.SocketDesignation)"
-          Write-Host "İşlemci ID               : $($cpu.ProcessorId)"
+          Write-Host "Processor Name           : $($cpu.Name)"
+          Write-Host "Manufacturer             : $($cpu.Manufacturer)"
+          Write-Host "Number of Cores          : $($cpu.NumberOfCores)"
+          Write-Host "Logical Processors       : $($cpu.NumberOfLogicalProcessors)"
+          Write-Host "Max Clock Speed (MHz)    : $($cpu.MaxClockSpeed)"
+          Write-Host "Current Clock Speed (MHz): $($cpu.CurrentClockSpeed)"
+          Write-Host "Architecture             : $($cpu.Architecture)"
+          Write-Host "Socket Designation       : $($cpu.SocketDesignation)"
+          Write-Host "Processor ID             : $($cpu.ProcessorId)"
 
-          Write-Host "==========================================================`n" -ForegroundColor Cyan
+          Write-Host "==============================================================`n" -ForegroundColor Cyan
 
       # ───────────────────────────────────────────────
       # 2. Configure Core RDP Settings
