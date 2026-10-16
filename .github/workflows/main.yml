@@ -172,16 +172,44 @@ jobs:
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $installerPath = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
-          Remove-Item $installerPath -Force
+          Start-Process msiexec.exe -ArgumentList "/i `"$installerPath`" /quiet /norestart" -Wait
+          Start-Sleep -Seconds 10
+          Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
+
+          $possiblePaths = @(
+            "$env:ProgramFiles\Tailscale\tailscale.exe",
+            "${env:ProgramFiles(x86)}\Tailscale\tailscale.exe",
+            "C:\Program Files\Tailscale\tailscale.exe",
+            "C:\Program Files (x86)\Tailscale\tailscale.exe"
+          )
+          $tsExe = $null
+          foreach ($p in $possiblePaths) {
+              if (Test-Path $p) {
+                  $tsExe = $p
+                  break
+              }
+          }
+          if (-not $tsExe) {
+              Write-Error "Tailscale executable not found after install"
+              exit 1
+          }
+          echo "TAILSCALE_EXE=$tsExe" >> $env:GITHUB_ENV
+          Write-Host "Tailscale found at: $tsExe"
 
       - name: Establish Tailscale Connection
         run: |
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+          $tsExe = $env:TAILSCALE_EXE
+          if (-not $tsExe -or -not (Test-Path $tsExe)) {
+              Write-Error "Tailscale executable not found"
+              exit 1
+          }
+
+          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+
           $tsIP = $null
           $retries = 0
-          while (-not $tsIP -and $retries -lt 10) {
-              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+          while (-not $tsIP -and $retries -lt 15) {
+              $tsIP = & $tsExe ip -4 2>$null
               Start-Sleep -Seconds 5
               $retries++
           }
@@ -190,6 +218,7 @@ jobs:
               exit 1
           }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+          Write-Host "Tailscale IP: $tsIP"
 
       - name: Verify RDP Accessibility
         run: |
