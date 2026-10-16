@@ -172,13 +172,16 @@ jobs:
             "AJRouter","SNMPTRAP","WpcMonSvc","wisvc",
             "DoSvc","wuauserv","UsoSvc","WaaSMedicSvc",
             "Spooler","PhoneSvc","TapiSrv","SCardSvr","ScDeviceEnum",
-            "EntAppSvc","WorkFolders",
-            "DusmSvc","FrameServer","RmSvc","CscService"
+            "EntAppSvc","WorkFolders","DusmSvc","FrameServer","RmSvc","CscService",
+            "PrintWorkflowUserSvc","PrintDeviceConfigurationService","WiaRpc","stisvc",
+            "HvHost","vmicvss","vmicheartbeat","vmickvpexchange","vmicrdv","vmicshutdown","vmictimesync","vmicvmsession",
+            "WpcMonSvc","WManSvc","NcaSvc"
           )
           foreach ($svc in $servicesToDisable) {
               try { Stop-Service -Name $svc -ErrorAction SilentlyContinue } catch {}
               try { Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue } catch {}
               sc.exe config $svc start= disabled 2>$null | Out-Null
+              $global:LASTEXITCODE = 0
           }
 
           reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Features" /v "TamperProtection" /t REG_DWORD /d 0 /f >$null 2>&1
@@ -195,13 +198,13 @@ jobs:
               "TermService","UmRdpService","SessionEnv","RemoteAccess",
               "mpssvc","BFE","WinRM","RpcLocator","TrustedInstaller",
               "RpcSs","DcomLaunch","RpcEptMapper","nsi","Dnscache","netprofm","NlaSvc",
-              "iphlpsvc","NcaSvc","NcbService","WinHttpAutoProxySvc","Dhcp","LanmanServer","LanmanWorkstation",
+              "iphlpsvc","WinHttpAutoProxySvc","Dhcp","LanmanServer","LanmanWorkstation",
               "Tailscale","UserDataSvc","UnistoreSvc","UserManager","TokenBroker",
               "ClipSVC","LicenseManager","InstallService","AppXSvc","StateRepository",
-              "ShellHWDetection","Themes","FontCache","FontCache3.0.0.0",
+              "ShellHWDetection","Themes","FontCache",
               "Audiosrv","AudioEndpointBuilder","BrokerInfrastructure","SystemEventsBroker",
               "EventLog","EventSystem","Schedule","ProfSvc","gpsvc","Winmgmt",
-              "Wlansvc","DPS","WdiServiceHost","WdiSystemHost","CryptSvc","KeyIso","SamSs"
+              "DPS","WdiServiceHost","WdiSystemHost","CryptSvc","KeyIso","SamSs"
           )) {
               try { Set-Service -Name $keepSvc -StartupType Automatic -ErrorAction SilentlyContinue } catch {}
               try { Start-Service -Name $keepSvc -ErrorAction SilentlyContinue } catch {}
@@ -237,6 +240,7 @@ jobs:
           Nuke-Path 'C:\$Recycle.Bin'
           vssadmin delete shadows /all /quiet 2>$null | Out-Null
           vssadmin resize shadowstorage /for=C: /on=C: /maxsize=1GB 2>$null | Out-Null
+          $global:LASTEXITCODE = 0
 
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338389Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SoftLandingEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
@@ -279,24 +283,26 @@ jobs:
             "\Microsoft\Windows\Diagnosis\Scheduled"
           )
           foreach ($task in $tasks) { schtasks /Change /TN $task /Disable 2>$null | Out-Null }
+          $global:LASTEXITCODE = 0
 
           powercfg -h off 2>$null | Out-Null
           powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null | Out-Null
           Dism.exe /Online /Cleanup-Image /StartComponentCleanup 2>$null | Out-Null
           wevtutil el 2>$null | ForEach-Object { wevtutil cl "$_" 2>$null | Out-Null }
           Optimize-Volume -DriveLetter C -ReTrim -ErrorAction SilentlyContinue 2>$null | Out-Null
+          $global:LASTEXITCODE = 0
 
           Write-Host "========== AGGRESSIVE SAFE CLEANUP COMPLETED ==========`n" -ForegroundColor Green
 
       - name: Repair Services After Cleanup
         run: |
           foreach ($svc in @(
-              "Themes","FontCache","FontCache3.0.0.0","ShellHWDetection",
+              "Themes","FontCache","ShellHWDetection",
               "Audiosrv","AudioEndpointBuilder","UserDataSvc","UnistoreSvc","UserManager","TokenBroker",
               "ClipSVC","LicenseManager","InstallService","AppXSvc","StateRepository",
               "BrokerInfrastructure","SystemEventsBroker","EventLog","EventSystem","Schedule","ProfSvc","gpsvc","Winmgmt",
-              "nsi","BFE","Dnscache","iphlpsvc","NlaSvc","netprofm","NcaSvc","NcbService",
-              "WinHttpAutoProxySvc","RpcSs","DcomLaunch","Dhcp","Wlansvc","DPS","WdiServiceHost","WdiSystemHost",
+              "nsi","BFE","Dnscache","iphlpsvc","NlaSvc","netprofm","WinHttpAutoProxySvc",
+              "RpcSs","DcomLaunch","Dhcp","DPS","WdiServiceHost","WdiSystemHost",
               "CryptSvc","KeyIso","SamSs"
           )) {
               try { Set-Service -Name $svc -StartupType Automatic -ErrorAction SilentlyContinue } catch {}
@@ -314,28 +320,52 @@ jobs:
           if (-not $tsIP) { Write-Error "Tailscale could not be brought back"; exit 1 }
           Write-Host "Tailscale recovered: $tsIP" -ForegroundColor Green
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+          exit 0
 
       - name: Memory Optimization
         run: |
           Write-Host "`n========== MEMORY OPTIMIZATION ==========" -ForegroundColor Cyan
 
-          # Defender servislerini zorla durdur
-          foreach ($svc in @("WinDefend","WdNisSvc","Sense","MsSense","SecurityHealthService","wscsvc","MpDefenderCoreService","SgrmBroker","WdFilter")) {
+          foreach ($svc in @("WinDefend","WdNisSvc","Sense","MsSense","SecurityHealthService","wscsvc","MpDefenderCoreService","SgrmBroker","WdFilter","WdNisDrv","WdBoot")) {
               sc.exe stop $svc 2>$null | Out-Null
               sc.exe config $svc start= disabled 2>$null | Out-Null
+              $global:LASTEXITCODE = 0
           }
 
-          # Gereksiz process'leri öldür
-          foreach ($proc in @("SearchIndexer","SearchProtocolHost","SearchFilterHost","SecurityHealthSystray","SecurityHealthService","MpCmdRun","MpDefenderCoreService","smartscreen","Widgets","WidgetService","PhoneExperienceHost","YourPhone","CrossDeviceService","OneDrive")) {
+          foreach ($proc in @("SearchIndexer","SearchProtocolHost","SearchFilterHost","SecurityHealthSystray","SecurityHealthService","MpCmdRun","MpDefenderCoreService","smartscreen","Widgets","WidgetService","PhoneExperienceHost","YourPhone","CrossDeviceService","OneDrive","RuntimeBroker","ShellExperienceHost","StartMenuExperienceHost","SearchApp","ApplicationFrameHost","SystemSettings","TextInputHost","ctfmon","dwm")) {
               try { Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue } catch {}
           }
 
-          # Ek servisler
           foreach ($svc in @("WSearch","SysMain","WerSvc","DiagTrack","dmwappushservice","BITS","MapsBroker","RetailDemo","DusmSvc","FrameServer")) {
               sc.exe stop $svc 2>$null | Out-Null
+              $global:LASTEXITCODE = 0
           }
 
-          Start-Sleep 5
+          Write-Host "Trimming working sets..." -ForegroundColor Yellow
+          $cs = 'using System;using System.Runtime.InteropServices;public class M{[DllImport("psapi.dll")]public static extern bool EmptyWorkingSet(IntPtr h);[DllImport("kernel32.dll")]public static extern IntPtr OpenProcess(int a,bool i,int p);[DllImport("kernel32.dll")]public static extern bool CloseHandle(IntPtr h);}'
+          try {
+              Add-Type -TypeDefinition $cs -ErrorAction Stop
+              $trimmed = 0
+              Get-Process -ErrorAction SilentlyContinue | ForEach-Object {
+                  try {
+                      $h = [M]::OpenProcess(0x1F0FFF, $false, $_.Id)
+                      if ($h -ne [IntPtr]::Zero) {
+                          [M]::EmptyWorkingSet($h) | Out-Null
+                          [M]::CloseHandle($h) | Out-Null
+                          $trimmed++
+                      }
+                  } catch {}
+              }
+              Write-Host "Trimmed $trimmed processes" -ForegroundColor Green
+          } catch {
+              Write-Host "Working set trim skipped: $_" -ForegroundColor Yellow
+          }
+
+          [System.GC]::Collect()
+          [System.GC]::WaitForPendingFinalizers()
+          [System.GC]::Collect()
+
+          Start-Sleep 8
 
           Write-Host "`n========== DISK & MEMORY SUMMARY ==========" -ForegroundColor Cyan
           $disk = Get-PSDrive C
@@ -348,6 +378,7 @@ jobs:
           $ramUsed = [math]::Round($ramTotal - $ramFree, 2)
           Write-Host "RAM Total: $ramTotal GB | Free: $ramFree GB | Used: $ramUsed GB"
           Write-Host "===========================================`n" -ForegroundColor Cyan
+          exit 0
 
       - name: Verify RDP Accessibility
         run: |
