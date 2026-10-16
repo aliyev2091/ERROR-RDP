@@ -31,15 +31,7 @@ jobs:
 
       - name: Create RDP User with Secure Password
         run: |
-          Add-Type -AssemblyName System.Security
-          \$charSet = @{
-              Upper   = [char[]](65..90)      # A-Z
-              Lower   = [char[]](97..122)     # a-z
-              Number  = [char[]](48..57)      # 0-9
-              Special = ([char[]](33..47) + [char[]](58..64) +
-                         [char[]](91..96) + [char[]](123..126)) # Special characters
-          }
-          \(rawPassword = @()\)rawPassword += \(charSet.Upper \vert{} Get-Random -Count 4\)rawPassword += \(charSet.Lower \vert{} Get-Random -Count 4\)rawPassword += \(charSet.Number \vert{} Get-Random -Count 4\)rawPassword += \(charSet.Special \vert{} Get-Random -Count 4\)password = "Password!?"
+          \$password = "SecurePass4004!"
           securePass = ConvertTo-SecureString password -AsPlainText -Force
           New-LocalUser -Name "ERROR-4004" -Password \$securePass -AccountNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004"
@@ -103,7 +95,7 @@ jobs:
           Write-Host "`n=== RDP ACCESS ==="
           Write-Host "Address: $env:TAILSCALE_IP"
           Write-Host "Username: ERROR-4004"
-          Write-Host "Password: $(echo $env:RDP_CREDS)"
+          Write-Host "Password: SecurePass4004!"
           Write-Host "==================`n"
 
           # Keep runner active indefinitely (or until manually cancelled)
