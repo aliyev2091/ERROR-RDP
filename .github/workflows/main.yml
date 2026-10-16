@@ -24,40 +24,21 @@ jobs:
           Write-Host "Processor ID             : $($cpu.ProcessorId)"
           Write-Host "==============================================================`n" -ForegroundColor Cyan
 
-      - name: Aggressive Safe Cleanup
+      - name: Maximum Disk Cleanup
         run: |
-          Write-Host "`n========== AGGRESSIVE SAFE CLEANUP STARTED ==========" -ForegroundColor Yellow
+          Write-Host "`n========== MAXIMUM DISK CLEANUP STARTED ==========" -ForegroundColor Yellow
 
           $safeToRemove = @(
-            "Microsoft.BingWeather",
-            "Microsoft.BingNews",
-            "Microsoft.GetHelp",
-            "Microsoft.Getstarted",
-            "Microsoft.WindowsFeedbackHub",
-            "Microsoft.MicrosoftOfficeHub",
-            "Microsoft.Todos",
-            "Microsoft.PowerAutomateDesktop",
-            "Microsoft.Windows.Photos",
-            "Microsoft.ScreenSketch",
-            "Microsoft.MSPaint",
-            "Microsoft.WindowsCamera",
-            "Microsoft.WindowsAlarms",
-            "Microsoft.WindowsSoundRecorder",
-            "Microsoft.People",
-            "Microsoft.SkypeApp",
-            "Clipchamp.Clipchamp",
-            "Microsoft.Xbox*",
-            "Microsoft.GamingApp",
-            "Microsoft.ZuneMusic",
-            "Microsoft.ZuneVideo",
-            "Microsoft.YourPhone",
-            "Microsoft.WindowsMaps",
-            "Microsoft.MicrosoftSolitaireCollection",
-            "Microsoft.549981C3F5F10",
-            "MicrosoftTeams",
+            "Microsoft.BingWeather","Microsoft.BingNews","Microsoft.GetHelp","Microsoft.Getstarted",
+            "Microsoft.WindowsFeedbackHub","Microsoft.MicrosoftOfficeHub","Microsoft.Todos",
+            "Microsoft.PowerAutomateDesktop","Microsoft.Windows.Photos","Microsoft.ScreenSketch",
+            "Microsoft.MSPaint","Microsoft.WindowsCamera","Microsoft.WindowsAlarms",
+            "Microsoft.WindowsSoundRecorder","Microsoft.People","Microsoft.SkypeApp",
+            "Clipchamp.Clipchamp","Microsoft.Xbox*","Microsoft.GamingApp","Microsoft.ZuneMusic",
+            "Microsoft.ZuneVideo","Microsoft.YourPhone","Microsoft.WindowsMaps",
+            "Microsoft.MicrosoftSolitaireCollection","Microsoft.549981C3F5F10","MicrosoftTeams",
             "Microsoft.OneDriveSync"
           )
-
           foreach ($app in $safeToRemove) {
               Get-AppxPackage -Name $app -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue
               Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | 
@@ -74,26 +55,56 @@ jobs:
           }
 
           $servicesToDisable = @(
-            "DiagTrack",
-            "dmwappushservice",
-            "SysMain",
-            "WSearch",
-            "XblAuthManager",
-            "XblGameSave",
-            "XboxGipSvc",
-            "XboxNetApiSvc",
-            "WMPNetworkSvc",
-            "Fax",
-            "RemoteRegistry",
-            "RetailDemo",
-            "MapsBroker",
-            "WerSvc",
-            "Spooler"
+            "DiagTrack","dmwappushservice","SysMain","WSearch","XblAuthManager","XblGameSave",
+            "XboxGipSvc","XboxNetApiSvc","WMPNetworkSvc","Fax","RemoteRegistry","RetailDemo",
+            "MapsBroker","WerSvc","Spooler","lfsvc","bthserv","CDPSvc","SSDPSRV","upnphost",
+            "TabletInputService"
           )
-
           foreach ($svc in $servicesToDisable) {
               Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
               Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+          }
+
+          $foldersToDelete = @(
+            "C:\Program Files (x86)\Android",
+            "C:\Android",
+            "C:\Program Files\Android",
+            "C:\Program Files\dotnet\sdk",
+            "C:\Program Files\dotnet\shared",
+            "C:\Program Files\dotnet\host",
+            "C:\Program Files\dotnet\packs",
+            "C:\Program Files\dotnet\templates",
+            "C:\Program Files\Microsoft Visual Studio",
+            "C:\Program Files (x86)\Microsoft Visual Studio",
+            "C:\Program Files\Microsoft SDKs",
+            "C:\Program Files (x86)\Microsoft SDKs",
+            "C:\Program Files\LLVM",
+            "C:\Program Files (x86)\LLVM",
+            "C:\Program Files\CMake",
+            "C:\Program Files\Git\mingw64\share",
+            "C:\ProgramData\chocolatey\lib",
+            "C:\ProgramData\chocolatey\bin",
+            "C:\Users\runneradmin\AppData\Local\Temp",
+            "C:\Users\runneradmin\AppData\Local\npm-cache",
+            "C:\Users\runneradmin\AppData\Local\Yarn",
+            "C:\Users\runneradmin\AppData\Local\Pip",
+            "C:\Users\runneradmin\AppData\Local\go-build",
+            "C:\Users\runneradmin\go",
+            "C:\Users\runneradmin\.nuget",
+            "C:\Users\runneradmin\.cache",
+            "C:\Users\runneradmin\AppData\Local\Microsoft\VisualStudio",
+            "C:\Windows\SoftwareDistribution\Download",
+            "C:\Windows\Temp",
+            "C:\Windows\Prefetch",
+            "C:\Windows\Logs",
+            "C:\Windows\System32\LogFiles"
+          )
+
+          foreach ($folder in $foldersToDelete) {
+              if (Test-Path $folder) {
+                  Write-Host "Deleting: $folder"
+                  Remove-Item -Path $folder -Recurse -Force -ErrorAction SilentlyContinue
+              }
           }
 
           Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
@@ -101,9 +112,18 @@ jobs:
           Remove-Item -Path "C:\Windows\Prefetch\*" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
 
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338389Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SoftLandingEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SystemPaneSuggestionsEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
+          $cs = Get-WmiObject -Class Win32_ComputerSystem -EnableAllPrivileges
+          $cs.AutomaticManagedPagefile = $false
+          $cs.Put() | Out-Null
+          $pagefile = Get-WmiObject -Class Win32_PageFileSetting -Filter "name='C:\\pagefile.sys'" -ErrorAction SilentlyContinue
+          if ($pagefile) {
+              $pagefile.InitialSize = 512
+              $pagefile.MaximumSize = 1024
+              $pagefile.Put() | Out-Null
+          }
+
+          powercfg /h off 2>$null
+          Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase 2>$null
 
           $tasks = @(
             "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
@@ -119,7 +139,9 @@ jobs:
               schtasks /Change /TN $task /Disable 2>$null
           }
 
-          Write-Host "========== AGGRESSIVE SAFE CLEANUP COMPLETED ==========`n" -ForegroundColor Green
+          Write-Host "`n========== DISK STATUS ==========" -ForegroundColor Cyan
+          Get-PSDrive C | Select-Object Used,Free | Format-List
+          Write-Host "========== MAXIMUM DISK CLEANUP COMPLETED ==========`n" -ForegroundColor Green
 
       - name: Configure Core RDP Settings
         run: |
