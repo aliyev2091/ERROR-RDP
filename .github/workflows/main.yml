@@ -29,6 +29,7 @@ jobs:
           $ErrorActionPreference = 'SilentlyContinue'
           Write-Host "`n========== AGGRESSIVE SAFE CLEANUP STARTED ==========" -ForegroundColor Yellow
 
+          # ---------- 1) APPX UYGULAMA SILME ----------
           $safeToRemove = @(
             "Microsoft.BingWeather",
             "Microsoft.BingNews",
@@ -79,7 +80,22 @@ jobs:
             "Microsoft.WindowsNotepad",
             "MicrosoftCorporationII.QuickAssist",
             "MicrosoftCorporationII.MicrosoftFamily",
-            "Microsoft.Windows.DevHome"
+            "Microsoft.Windows.DevHome",
+            "Microsoft.WindowsCalculator",
+            "Microsoft.WindowsStore",
+            "Microsoft.StorePurchaseApp",
+            "Microsoft.DesktopAppInstaller",
+            "Microsoft.WindowsTerminal",
+            "Microsoft.Windows.Photos",
+            "Microsoft.WebMediaExtensions",
+            "Microsoft.WebpImageExtension",
+            "Microsoft.HEIFImageExtension",
+            "Microsoft.HEVCVideoExtension",
+            "Microsoft.VP9VideoExtensions",
+            "Microsoft.AV1VideoExtension",
+            "Microsoft.MPEG2VideoExtension",
+            "Microsoft.RawImageExtension",
+            "Microsoft.AVCEncoderVideoExtension"
           )
 
           foreach ($app in $safeToRemove) {
@@ -96,14 +112,31 @@ jobs:
               } catch {}
           }
 
-          taskkill /f /im OneDrive.exe 2>$null
+          # ---------- 2) EDGE KALDIRMA ----------
+          Write-Host "Removing Microsoft Edge..." -ForegroundColor Yellow
+          $edgeSetupX86 = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\*\Installer\setup.exe"
+          $edgeSetupX64 = "$env:ProgramFiles\Microsoft\Edge\Application\*\Installer\setup.exe"
+          Get-ChildItem $edgeSetupX86, $edgeSetupX64 -ErrorAction SilentlyContinue | ForEach-Object {
+              Start-Process $_.FullName -ArgumentList "--uninstall", "--system-level", "--verbose-logging", "--force-uninstall" -Wait -ErrorAction SilentlyContinue
+          }
+          Remove-Item -Path "${env:ProgramFiles(x86)}\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "$env:ProgramFiles\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "$env:LOCALAPPDATA\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
+
+          # ---------- 3) ONEDRIVE KALDIRMA ----------
+          taskkill /f /im OneDrive.exe 2>$null | Out-Null
+          taskkill /f /im explorer.exe 2>$null | Out-Null
           if (Test-Path "$env:SystemRoot\SysWOW64\OneDriveSetup.exe") {
               Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue
           }
           if (Test-Path "$env:SystemRoot\System32\OneDriveSetup.exe") {
               Start-Process "$env:SystemRoot\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue
           }
+          Remove-Item -Path "$env:LOCALAPPDATA\Microsoft\OneDrive" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "$env:ProgramData\Microsoft OneDrive" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\OneDriveTemp" -Recurse -Force -ErrorAction SilentlyContinue
 
+          # ---------- 4) SERVIS DİSABLE ----------
           $servicesToDisable = @(
             "DiagTrack",
             "dmwappushservice",
@@ -151,48 +184,123 @@ jobs:
             "AJRouter",
             "SNMPTRAP",
             "WpcMonSvc",
-            "wisvc"
-          )
+            "wisvc",
+            "MapsBroker",
+            "TrkWks",
+            "WMPNetworkSvc",
+            "DoSvc",
+            "BITS",
+            "wuauserv",
+            "UsoSvc",
+            "WaaSMedicSvc",
+            "TrustedInstaller",
+            "SessionEnv",
+            "UmRdpService",
+            "TermService",
+            "RemoteAccess",
+            "SstpSvc",
+            "IKEEXT",
+            "PolicyAgent",
+            "BFE",
+            "mpssvc",
+            "WinRM",
+            "RpcLocator"
+          ) | Where-Object { $_ -notin @("SessionEnv","UmRdpService","TermService","RemoteAccess","mpssvc","BFE","WinRM","RpcLocator","TrustedInstaller","DoSvc","BITS") }
 
           foreach ($svc in $servicesToDisable) {
               try { Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue 2>$null } catch {}
               try { Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue 2>$null } catch {}
           }
 
-          Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Prefetch\*" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\SoftwareDistribution\DataStore\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\DeliveryOptimization\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\Public\Documents\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\Public\Downloads\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\Public\Music\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\Public\Pictures\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\Public\Videos\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Logs\CBS\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Logs\DISM\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Logs\MoSetup\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Logs\WindowsUpdate\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Logs\waasmedic\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Logs\SIH\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\LiveKernelReports\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Minidump\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\memory.dmp" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\ProgramData\Microsoft\Windows\WER\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\ProgramData\Microsoft\Windows Defender\Scans\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\*\AppData\Local\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\*\AppData\Local\Microsoft\Windows\INetCache\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\*\AppData\Local\Microsoft\Windows\WebCache\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\*\AppData\Local\Microsoft\Windows\Explorer\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\*\AppData\Local\CrashDumps\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\*\AppData\Local\Packages\*\LocalCache\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Downloaded Program Files\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path 'C:\$Recycle.Bin\*' -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Panther\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\System32\LogFiles\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\ProgramData\Package Cache\*" -Recurse -Force -ErrorAction SilentlyContinue
+          # RDP için KRİTİK olanları açık tut
+          foreach ($keepSvc in @("TermService","UmRdpService","SessionEnv","RemoteAccess","mpssvc","BFE","WinRM","RpcLocator")) {
+              try { Set-Service -Name $keepSvc -StartupType Automatic -ErrorAction SilentlyContinue 2>$null } catch {}
+              try { Start-Service -Name $keepSvc -ErrorAction SilentlyContinue 2>$null } catch {}
+          }
 
+          # ---------- 5) SAHİPLENİP SİLME (takeown + icacls) ----------
+          function Nuke-Path($path) {
+              if (Test-Path $path) {
+                  try {
+                      takeown /f "$path" /r /d y 2>$null | Out-Null
+                      icacls "$path" /grant administrators:F /t 2>$null | Out-Null
+                      Remove-Item -Path "$path" -Recurse -Force -ErrorAction SilentlyContinue
+                  } catch {}
+              }
+          }
+
+          $nukeList = @(
+            "$env:TEMP",
+            "C:\Windows\Temp",
+            "C:\Windows\Prefetch",
+            "C:\Windows\SoftwareDistribution\Download",
+            "C:\Windows\SoftwareDistribution\DataStore",
+            "C:\Windows\DeliveryOptimization",
+            "C:\Windows\Logs\CBS",
+            "C:\Windows\Logs\DISM",
+            "C:\Windows\Logs\MoSetup",
+            "C:\Windows\Logs\WindowsUpdate",
+            "C:\Windows\Logs\waasmedic",
+            "C:\Windows\Logs\SIH",
+            "C:\Windows\Logs\NetSetup",
+            "C:\Windows\LiveKernelReports",
+            "C:\Windows\Minidump",
+            "C:\Windows\Panther",
+            "C:\Windows\System32\LogFiles",
+            "C:\ProgramData\Microsoft\Windows\WER",
+            "C:\ProgramData\Microsoft\Windows Defender\Scans",
+            "C:\ProgramData\Package Cache",
+            "C:\Windows\Downloaded Program Files",
+            "C:\Windows\Speech",
+            "C:\Windows\Speech_OneCore"
+          )
+
+          foreach ($p in $nukeList) { Nuke-Path $p }
+
+          # ---------- 6) WINDOWS SEARCH INDEX SİLME ----------
+          Write-Host "Removing Windows Search index..." -ForegroundColor Yellow
+          try { Stop-Service WSearch -Force -ErrorAction SilentlyContinue 2>$null } catch {}
+          Nuke-Path "C:\ProgramData\Microsoft\Search\Data"
+
+          # ---------- 7) WINDOWS.OLD / RECOVERY / WINRE ----------
+          Write-Host "Removing Windows.old / Recovery leftovers..." -ForegroundColor Yellow
+          Nuke-Path "C:\Windows.old"
+          Nuke-Path "C:\Recovery\WindowsRE"
+
+          # ---------- 8) SÜRÜCÜ DEPOSU VE DİL PAKETLERİ ----------
+          Write-Host "Cleaning driver store and language packs..." -ForegroundColor Yellow
+          try { pnputil /enum-drivers 2>$null | Out-Null } catch {}
+          Get-WindowsDriver -Online -ErrorAction SilentlyContinue | Where-Object { $_.ClassName -eq "Legacy" -or $_.ProviderName -match "Unknown" } | ForEach-Object {
+              try { pnputil /delete-driver $_.Driver -uninstall /force 2>$null | Out-Null } catch {}
+          }
+
+          # ---------- 9) KULLANICI TEMİZLİĞİ ----------
+          $userCleanup = @(
+            "C:\Users\*\AppData\Local\Temp",
+            "C:\Users\*\AppData\Local\Microsoft\Windows\INetCache",
+            "C:\Users\*\AppData\Local\Microsoft\Windows\WebCache",
+            "C:\Users\*\AppData\Local\Microsoft\Windows\Explorer",
+            "C:\Users\*\AppData\Local\CrashDumps",
+            "C:\Users\*\AppData\Local\Packages\*\LocalCache",
+            "C:\Users\*\AppData\Local\Packages\*\TempState",
+            "C:\Users\*\AppData\Local\Microsoft\Edge",
+            "C:\Users\*\AppData\Local\Google\Chrome",
+            "C:\Users\Public\Documents",
+            "C:\Users\Public\Downloads",
+            "C:\Users\Public\Music",
+            "C:\Users\Public\Pictures",
+            "C:\Users\Public\Videos"
+          )
+          foreach ($uc in $userCleanup) {
+              Get-ChildItem -Path $uc -ErrorAction SilentlyContinue | ForEach-Object {
+                  Nuke-Path $_.FullName
+              }
+          }
+
+          # ---------- 10) GERİ DÖNÜŞÜM KUTUSU ----------
+          Nuke-Path 'C:\$Recycle.Bin'
+
+          # ---------- 11) REGISTRY AYARLARI ----------
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338389Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SoftLandingEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SystemPaneSuggestionsEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
@@ -210,7 +318,16 @@ jobs:
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "ClearPageFileAtShutdown" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" /v "EnablePrefetcher" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" /v "EnableSuperfetch" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v "EnableLUA" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v "ConsentPromptBehaviorAdmin" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v "NoAutoUpdate" /t REG_DWORD /d 1 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v "AUOptions" /t REG_DWORD /d 2 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\VisualFXSetting" /v "VisualFXSetting" /t REG_DWORD /d 2 /f >$null 2>&1
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v "VisualFXSetting" /t REG_DWORD /d 2 /f >$null 2>&1
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v "fDenyTSConnections" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v "NoInstrumentation" /t REG_DWORD /d 1 /f >$null 2>&1
 
+          # ---------- 12) ZAMANLANMIŞ GÖREVLER ----------
           $tasks = @(
             "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
             "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
@@ -240,27 +357,30 @@ jobs:
             "\Microsoft\Windows\UPnP\UPnPHostConfig",
             "\Microsoft\Windows\WDI\ResolutionHost",
             "\Microsoft\Windows\Windows Filtering Platform\BfeOnServiceStartTypeChange",
-            "\Microsoft\Windows\Workplace Join\Automatic-Device-Join"
+            "\Microsoft\Windows\Workplace Join\Automatic-Device-Join",
+            "\Microsoft\Windows\Defrag\ScheduledDefrag",
+            "\Microsoft\Windows\Diagnosis\Scheduled",
+            "\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload"
           )
           foreach ($task in $tasks) {
               schtasks /Change /TN $task /Disable 2>$null | Out-Null
           }
 
+          # ---------- 13) HIBERNATION / POWER / VISUAL ----------
           Write-Host "Disabling hibernation..." -ForegroundColor Yellow
-          powercfg -h off 2>$null
+          powercfg -h off 2>$null | Out-Null
+          powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null | Out-Null
 
-          Write-Host "Setting high performance power plan..." -ForegroundColor Yellow
-          powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null
-
-          Write-Host "Disabling visual effects..." -ForegroundColor Yellow
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\VisualFXSetting" /v "VisualFXSetting" /t REG_DWORD /d 2 /f >$null 2>&1
-
+          # ---------- 14) DISM CLEANUP ----------
           Write-Host "Running DISM component cleanup..." -ForegroundColor Yellow
           Dism.exe /Online /Cleanup-Image /StartComponentCleanup 2>$null | Out-Null
+          Dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase 2>$null | Out-Null
 
+          # ---------- 15) EVENT LOG TEMİZLİĞİ ----------
           Write-Host "Clearing event logs..." -ForegroundColor Yellow
           wevtutil el 2>$null | ForEach-Object { wevtutil cl "$_" 2>$null | Out-Null }
 
+          # ---------- 16) DISK OPTIMIZE ----------
           Write-Host "Optimizing volume..." -ForegroundColor Yellow
           Optimize-Volume -DriveLetter C -ReTrim -ErrorAction SilentlyContinue 2>$null | Out-Null
 
