@@ -43,6 +43,7 @@ jobs:
             "Microsoft.Windows.Photos",
             "Microsoft.ScreenSketch",
             "Microsoft.MSPaint",
+            "Microsoft.Paint",
             "Microsoft.WindowsCamera",
             "Microsoft.WindowsAlarms",
             "Microsoft.WindowsSoundRecorder",
@@ -51,6 +52,7 @@ jobs:
             "Clipchamp.Clipchamp",
             "Microsoft.Xbox*",
             "Microsoft.GamingApp",
+            "Microsoft.GamingServices",
             "Microsoft.ZuneMusic",
             "Microsoft.ZuneVideo",
             "Microsoft.YourPhone",
@@ -70,10 +72,46 @@ jobs:
             "Microsoft.Print3D",
             "Microsoft.NetworkSpeedTest",
             "Microsoft.News",
-            "Microsoft.WindowsFeedbackHub",
             "Microsoft.Advertising.Xaml",
             "Microsoft.Messaging",
-            "Microsoft.OneDrive"
+            "Microsoft.OneDrive",
+            "Microsoft.Cortana",
+            "Microsoft.Windows.Cortana",
+            "Microsoft.Windows.NarratorQuickStart",
+            "Microsoft.Windows.OOBENetworkCaptivePortal",
+            "Microsoft.Windows.OOBENetworkConnectionFlow",
+            "Microsoft.Windows.ParentalControls",
+            "Microsoft.Windows.PeopleExperienceHost",
+            "Microsoft.Windows.PinningConfirmationDialog",
+            "Microsoft.MicrosoftEdge.Stable",
+            "Microsoft.Edge",
+            "Microsoft.Windows.DevHome",
+            "Microsoft.WindowsNotepad",
+            "MicrosoftCorporationII.MicrosoftFamily",
+            "MicrosoftCorporationII.QuickAssist",
+            "Microsoft.Windows.AssignedAccessLockApp",
+            "Microsoft.Windows.ContentDeliveryManager",
+            "Microsoft.AsyncTextService",
+            "Microsoft.AccountsControl",
+            "Microsoft.BioEnrollment",
+            "Microsoft.CredDialogHost",
+            "Microsoft.ECApp",
+            "Microsoft.XboxGameOverlay",
+            "Microsoft.XboxGamingOverlay",
+            "Microsoft.XboxIdentityProvider",
+            "Microsoft.XboxSpeechToTextOverlay",
+            "Microsoft.Xbox.TCUI",
+            "Microsoft.XboxApp",
+            "Microsoft.Windows.HolographicFirstRun",
+            "Microsoft.MicrosoftEdgeDevToolsClient",
+            "Microsoft.MicrosoftEdgeBeta",
+            "Microsoft.MicrosoftEdgeDev",
+            "Microsoft.Windows.CloudExperienceHost",
+            "Microsoft.Windows.ShellExperienceHost",
+            "Microsoft.Windows.StartMenuExperienceHost",
+            "Microsoft.Windows.Search",
+            "Microsoft.Windows.SecHealthUI",
+            "Microsoft.Windows.DevHome"
           )
 
           foreach ($app in $safeToRemove) {
@@ -107,7 +145,46 @@ jobs:
             "RetailDemo",
             "MapsBroker",
             "WerSvc",
-            "Spooler"
+            "Spooler",
+            "TabletInputService",
+            "TouchKeyboardAndHandwritingPanelService",
+            "PrintNotify",
+            "lfsvc",
+            "diagnosticshub.standardcollector.service",
+            "SecurityHealthService",
+            "WinDefend",
+            "WdNisSvc",
+            "Sense",
+            "MsSense",
+            "WpnService",
+            "WpnUserService",
+            "CDPSvc",
+            "CDPUserSvc",
+            "OneSyncSvc",
+            "PcaSvc",
+            "WbioSrvc",
+            "BluetoothUserService",
+            "bthserv",
+            "BTAGService",
+            "BthAvctpSvc",
+            "SEMgrSvc",
+            "NfcCxSC",
+            "SmsRouter",
+            "SharedAccess",
+            "icssvc",
+            "SensorService",
+            "SensrSvc",
+            "SensorDataService",
+            "WalletService",
+            "AssignedAccessManagerSvc",
+            "GraphicsPerfSvc",
+            "MessagingService",
+            "AJRouter",
+            "SNMPTRAP",
+            "WpcMonSvc",
+            "wisvc",
+            "WdiServiceHost",
+            "WdiSystemHost"
           )
 
           foreach ($svc in $servicesToDisable) {
@@ -119,39 +196,157 @@ jobs:
           Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Prefetch\*" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\SoftwareDistribution\DataStore\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\DeliveryOptimization\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\Public\Documents\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\Public\Downloads\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\Public\Music\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\Public\Pictures\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\Public\Videos\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Logs\CBS\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Logs\DISM\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Logs\MoSetup\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Logs\WindowsUpdate\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Logs\waasmedic\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Logs\SIH\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\LiveKernelReports\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Minidump\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\memory.dmp" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\ProgramData\Microsoft\Windows\WER\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\ProgramData\Microsoft\Windows Defender\Scans\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\*\AppData\Local\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\*\AppData\Local\Microsoft\Windows\INetCache\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\*\AppData\Local\Microsoft\Windows\WebCache\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\*\AppData\Local\Microsoft\Windows\Explorer\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\*\AppData\Local\CrashDumps\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\*\AppData\Local\Packages\*\LocalCache\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Downloaded Program Files\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path 'C:\$Recycle.Bin\*' -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Recovery\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Panther\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\System32\LogFiles\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\ProgramData\Package Cache\*" -Recurse -Force -ErrorAction SilentlyContinue
 
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338389Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SoftLandingEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SystemPaneSuggestionsEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-310093Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338388Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338393Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-353694Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-353696Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SilentInstalledAppsEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" /v "AllowTelemetry" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection" /v "AllowTelemetry" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKLM\SYSTEM\CurrentControlSet\Services\SgrmBroker" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v "DisableAntiSpyware" /t REG_DWORD /d 1 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" /v "DisableRealtimeMonitoring" /t REG_DWORD /d 1 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" /v "DisableBehaviorMonitoring" /t REG_DWORD /d 1 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" /v "DisableOnAccessProtection" /t REG_DWORD /d 1 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" /v "DisableScanOnRealtimeEnable" /t REG_DWORD /d 1 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet" /v "SpynetReporting" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet" /v "SubmitSamplesConsent" /t REG_DWORD /d 2 /f >$null 2>&1
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "LargeSystemCache" /t REG_DWORD /d 1 /f >$null 2>&1
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "DisablePagingExecutive" /t REG_DWORD /d 1 /f >$null 2>&1
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "ClearPageFileAtShutdown" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" /v "EnablePrefetcher" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" /v "EnableSuperfetch" /t REG_DWORD /d 0 /f >$null 2>&1
 
           $tasks = @(
             "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
             "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
+            "\Microsoft\Windows\Application Experience\StartupAppTask",
+            "\Microsoft\Windows\Application Experience\PcaPatchDbTask",
             "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
             "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip",
+            "\Microsoft\Windows\Customer Experience Improvement Program\KernelCeipTask",
             "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector",
             "\Microsoft\Windows\Feedback\Siuf\DmClient",
             "\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload",
-            "\Microsoft\Windows\Windows Error Reporting\QueueReporting"
+            "\Microsoft\Windows\Windows Error Reporting\QueueReporting",
+            "\Microsoft\Windows\Autochk\Proxy",
+            "\Microsoft\Windows\CloudExperienceHost\CreateObjectTask",
+            "\Microsoft\Windows\DiskFootprint\Diagnostics",
+            "\Microsoft\Windows\DiskFootprint\StorageSense",
+            "\Microsoft\Windows\Maintenance\WinSAT",
+            "\Microsoft\Windows\Media Center\mcupdate_scheduled",
+            "\Microsoft\Windows\Media Center\OCURActivate",
+            "\Microsoft\Windows\Media Center\OCURDiscovery",
+            "\Microsoft\Windows\Media Center\PBDADiscovery",
+            "\Microsoft\Windows\Media Center\PBDADiscoveryW1",
+            "\Microsoft\Windows\Media Center\PBDADiscoveryW2",
+            "\Microsoft\Windows\Media Center\PeriodicScanRetry",
+            "\Microsoft\Windows\Media Center\RecordingRestart",
+            "\Microsoft\Windows\Media Center\RegisterSearch",
+            "\Microsoft\Windows\Media Center\ReindexSearchRoot",
+            "\Microsoft\Windows\Media Center\SqlLiteRecoveryTask",
+            "\Microsoft\Windows\Media Center\UpdateRecordPath",
+            "\Microsoft\Windows\Shell\FamilySafetyMonitor",
+            "\Microsoft\Windows\Shell\FamilySafetyRefresh",
+            "\Microsoft\Windows\Shell\FamilySafetyUpload",
+            "\Microsoft\Windows\Windows Media Sharing\UpdateLibrary",
+            "\Microsoft\Windows\Maps\MapsToastTask",
+            "\Microsoft\Windows\Maps\MapsUpdateTask",
+            "\Microsoft\Windows\PI\Sqm-Tasks",
+            "\Microsoft\Windows\Power Efficiency Diagnostics\AnalyzeSystem",
+            "\Microsoft\Windows\Registry\RegIdleBackup",
+            "\Microsoft\Windows\Servicing\StartComponentCleanup",
+            "\Microsoft\Windows\Sysmain\HybridDriveCachePrepopulate",
+            "\Microsoft\Windows\Sysmain\HybridDriveCacheRebalance",
+            "\Microsoft\Windows\Sysmain\ResPriStaticDbSync",
+            "\Microsoft\Windows\Sysmain\WsSwapAssessmentTask",
+            "\Microsoft\Windows\Time Synchronization\SynchronizeTime",
+            "\Microsoft\Windows\UPnP\UPnPHostConfig",
+            "\Microsoft\Windows\WDI\ResolutionHost",
+            "\Microsoft\Windows\Windows Filtering Platform\BfeOnServiceStartTypeChange",
+            "\Microsoft\Windows\Workplace Join\Automatic-Device-Join",
+            "\Microsoft\Windows\Windows Defender\Windows Defender Cache Maintenance",
+            "\Microsoft\Windows\Windows Defender\Windows Defender Cleanup",
+            "\Microsoft\Windows\Windows Defender\Windows Defender Scheduled Scan",
+            "\Microsoft\Windows\Windows Defender\Windows Defender Verification"
           )
           foreach ($task in $tasks) {
               schtasks /Change /TN $task /Disable 2>$null
           }
 
+          Write-Host "Disabling hibernation..." -ForegroundColor Yellow
+          powercfg -h off 2>$null
+
+          Write-Host "Setting high performance power plan..." -ForegroundColor Yellow
+          powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null
+
+          Write-Host "Disabling visual effects..." -ForegroundColor Yellow
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force -ErrorAction SilentlyContinue
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\VisualFXSetting" /v "VisualFXSetting" /t REG_DWORD /d 2 /f >$null 2>&1
+
+          Write-Host "Running DISM component cleanup..." -ForegroundColor Yellow
+          Dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase 2>$null | Out-Null
+
+          Write-Host "Clearing event logs..." -ForegroundColor Yellow
+          wevtutil el 2>$null | ForEach-Object { wevtutil cl "$_" 2>$null }
+
+          Write-Host "Removing Windows.old if present..." -ForegroundColor Yellow
+          if (Test-Path "C:\Windows.old") {
+              takeown /f "C:\Windows.old" /r /d y 2>$null | Out-Null
+              icacls "C:\Windows.old" /grant administrators:F /t 2>$null | Out-Null
+              Remove-Item -Path "C:\Windows.old" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+          Write-Host "Optimizing volume..." -ForegroundColor Yellow
+          Optimize-Volume -DriveLetter C -ReTrim -ErrorAction SilentlyContinue 2>$null
+
           Write-Host "========== AGGRESSIVE SAFE CLEANUP COMPLETED ==========`n" -ForegroundColor Green
+
+          Write-Host "`n========== DISK & MEMORY SUMMARY ==========" -ForegroundColor Cyan
+          $disk = Get-PSDrive C
+          $freeGB = [math]::Round($disk.Free / 1GB, 2)
+          $usedGB = [math]::Round($disk.Used / 1GB, 2)
+          Write-Host "C: Free: $freeGB GB | Used: $usedGB GB"
+          $os = Get-CimInstance Win32_OperatingSystem
+          $ramTotal = [math]::Round($os.TotalVisibleMemorySize / 1MB, 2)
+          $ramFree = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
+          Write-Host "RAM Total: $ramTotal GB | Free: $ramFree GB"
+          Write-Host "===========================================`n" -ForegroundColor Cyan
 
       - name: Configure Core RDP Settings
         run: |
