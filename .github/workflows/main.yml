@@ -9,6 +9,30 @@ jobs:
     timeout-minutes: 3600
 
     steps:
+      # ───────────────────────────────────────────────
+      # 1. İşlemci (CPU) Bilgilerini Göster
+      # ───────────────────────────────────────────────
+      - name: Show Processor Information
+        run: |
+          Write-Host "`n==================== İŞLEMCİ BİLGİLERİ ====================" -ForegroundColor Cyan
+
+          $cpu = Get-CimInstance Win32_Processor
+
+          Write-Host "İşlemci Adı              : $($cpu.Name)"
+          Write-Host "Üretici                  : $($cpu.Manufacturer)"
+          Write-Host "Çekirdek Sayısı          : $($cpu.NumberOfCores)"
+          Write-Host "Mantıksal İşlemci (Thread): $($cpu.NumberOfLogicalProcessors)"
+          Write-Host "Maksimum Hız (MHz)       : $($cpu.MaxClockSpeed)"
+          Write-Host "Güncel Hız (MHz)         : $($cpu.CurrentClockSpeed)"
+          Write-Host "Mimari                   : $($cpu.Architecture)"
+          Write-Host "Soket                    : $($cpu.SocketDesignation)"
+          Write-Host "İşlemci ID               : $($cpu.ProcessorId)"
+
+          Write-Host "==========================================================`n" -ForegroundColor Cyan
+
+      # ───────────────────────────────────────────────
+      # 2. Configure Core RDP Settings
+      # ───────────────────────────────────────────────
       - name: Configure Core RDP Settings
         run: |
           # Enable Remote Desktop and disable Network Level Authentication (if needed)
@@ -29,6 +53,9 @@ jobs:
           # (Optional) Restart the Remote Desktop service to ensure changes take effect
           Restart-Service -Name TermService -Force
 
+      # ───────────────────────────────────────────────
+      # 3. Create RDP User with Secure Password
+      # ───────────────────────────────────────────────
       - name: Create RDP User with Secure Password
         run: |
           Add-Type -AssemblyName System.Security
@@ -57,6 +84,9 @@ jobs:
               exit 1
           }
 
+      # ───────────────────────────────────────────────
+      # 4. Install Tailscale
+      # ───────────────────────────────────────────────
       - name: Install Tailscale
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
@@ -66,6 +96,9 @@ jobs:
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
           Remove-Item $installerPath -Force
 
+      # ───────────────────────────────────────────────
+      # 5. Establish Tailscale Connection
+      # ───────────────────────────────────────────────
       - name: Establish Tailscale Connection
         run: |
           # Bring up Tailscale with the provided auth key and set a unique hostname
@@ -86,6 +119,9 @@ jobs:
           }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
+      # ───────────────────────────────────────────────
+      # 6. Verify RDP Accessibility
+      # ───────────────────────────────────────────────
       - name: Verify RDP Accessibility
         run: |
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
@@ -98,6 +134,9 @@ jobs:
           }
           Write-Host "TCP connectivity successful!"
 
+      # ───────────────────────────────────────────────
+      # 7. Maintain Connection
+      # ───────────────────────────────────────────────
       - name: Maintain Connection
         run: |
           Write-Host "`n=== RDP ACCESS ==="
