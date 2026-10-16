@@ -86,7 +86,6 @@ jobs:
             "Microsoft.StorePurchaseApp",
             "Microsoft.DesktopAppInstaller",
             "Microsoft.WindowsTerminal",
-            "Microsoft.Windows.Photos",
             "Microsoft.WebMediaExtensions",
             "Microsoft.WebpImageExtension",
             "Microsoft.HEIFImageExtension",
@@ -125,7 +124,6 @@ jobs:
 
           # ---------- 3) ONEDRIVE KALDIRMA ----------
           taskkill /f /im OneDrive.exe 2>$null | Out-Null
-          taskkill /f /im explorer.exe 2>$null | Out-Null
           if (Test-Path "$env:SystemRoot\SysWOW64\OneDriveSetup.exe") {
               Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue
           }
@@ -136,7 +134,7 @@ jobs:
           Remove-Item -Path "$env:ProgramData\Microsoft OneDrive" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\OneDriveTemp" -Recurse -Force -ErrorAction SilentlyContinue
 
-          # ---------- 4) SERVIS DİSABLE ----------
+          # ---------- 4) SERVIS DISABLE ----------
           $servicesToDisable = @(
             "DiagTrack",
             "dmwappushservice",
@@ -185,27 +183,13 @@ jobs:
             "SNMPTRAP",
             "WpcMonSvc",
             "wisvc",
-            "MapsBroker",
             "TrkWks",
-            "WMPNetworkSvc",
             "DoSvc",
             "BITS",
             "wuauserv",
             "UsoSvc",
-            "WaaSMedicSvc",
-            "TrustedInstaller",
-            "SessionEnv",
-            "UmRdpService",
-            "TermService",
-            "RemoteAccess",
-            "SstpSvc",
-            "IKEEXT",
-            "PolicyAgent",
-            "BFE",
-            "mpssvc",
-            "WinRM",
-            "RpcLocator"
-          ) | Where-Object { $_ -notin @("SessionEnv","UmRdpService","TermService","RemoteAccess","mpssvc","BFE","WinRM","RpcLocator","TrustedInstaller","DoSvc","BITS") }
+            "WaaSMedicSvc"
+          )
 
           foreach ($svc in $servicesToDisable) {
               try { Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue 2>$null } catch {}
@@ -213,7 +197,7 @@ jobs:
           }
 
           # RDP için KRİTİK olanları açık tut
-          foreach ($keepSvc in @("TermService","UmRdpService","SessionEnv","RemoteAccess","mpssvc","BFE","WinRM","RpcLocator")) {
+          foreach ($keepSvc in @("TermService","UmRdpService","SessionEnv","RemoteAccess","mpssvc","BFE","WinRM","RpcLocator","TrustedInstaller")) {
               try { Set-Service -Name $keepSvc -StartupType Automatic -ErrorAction SilentlyContinue 2>$null } catch {}
               try { Start-Service -Name $keepSvc -ErrorAction SilentlyContinue 2>$null } catch {}
           }
@@ -246,10 +230,8 @@ jobs:
             "C:\Windows\LiveKernelReports",
             "C:\Windows\Minidump",
             "C:\Windows\Panther",
-            "C:\Windows\System32\LogFiles",
             "C:\ProgramData\Microsoft\Windows\WER",
             "C:\ProgramData\Microsoft\Windows Defender\Scans",
-            "C:\ProgramData\Package Cache",
             "C:\Windows\Downloaded Program Files",
             "C:\Windows\Speech",
             "C:\Windows\Speech_OneCore"
@@ -267,14 +249,7 @@ jobs:
           Nuke-Path "C:\Windows.old"
           Nuke-Path "C:\Recovery\WindowsRE"
 
-          # ---------- 8) SÜRÜCÜ DEPOSU VE DİL PAKETLERİ ----------
-          Write-Host "Cleaning driver store and language packs..." -ForegroundColor Yellow
-          try { pnputil /enum-drivers 2>$null | Out-Null } catch {}
-          Get-WindowsDriver -Online -ErrorAction SilentlyContinue | Where-Object { $_.ClassName -eq "Legacy" -or $_.ProviderName -match "Unknown" } | ForEach-Object {
-              try { pnputil /delete-driver $_.Driver -uninstall /force 2>$null | Out-Null } catch {}
-          }
-
-          # ---------- 9) KULLANICI TEMİZLİĞİ ----------
+          # ---------- 8) KULLANICI TEMİZLİĞİ ----------
           $userCleanup = @(
             "C:\Users\*\AppData\Local\Temp",
             "C:\Users\*\AppData\Local\Microsoft\Windows\INetCache",
@@ -284,7 +259,6 @@ jobs:
             "C:\Users\*\AppData\Local\Packages\*\LocalCache",
             "C:\Users\*\AppData\Local\Packages\*\TempState",
             "C:\Users\*\AppData\Local\Microsoft\Edge",
-            "C:\Users\*\AppData\Local\Google\Chrome",
             "C:\Users\Public\Documents",
             "C:\Users\Public\Downloads",
             "C:\Users\Public\Music",
@@ -297,10 +271,10 @@ jobs:
               }
           }
 
-          # ---------- 10) GERİ DÖNÜŞÜM KUTUSU ----------
+          # ---------- 9) GERİ DÖNÜŞÜM KUTUSU ----------
           Nuke-Path 'C:\$Recycle.Bin'
 
-          # ---------- 11) REGISTRY AYARLARI ----------
+          # ---------- 10) REGISTRY AYARLARI ----------
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338389Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SoftLandingEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SystemPaneSuggestionsEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
@@ -327,7 +301,7 @@ jobs:
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v "fDenyTSConnections" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v "NoInstrumentation" /t REG_DWORD /d 1 /f >$null 2>&1
 
-          # ---------- 12) ZAMANLANMIŞ GÖREVLER ----------
+          # ---------- 11) ZAMANLANMIŞ GÖREVLER ----------
           $tasks = @(
             "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
             "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
@@ -359,28 +333,26 @@ jobs:
             "\Microsoft\Windows\Windows Filtering Platform\BfeOnServiceStartTypeChange",
             "\Microsoft\Windows\Workplace Join\Automatic-Device-Join",
             "\Microsoft\Windows\Defrag\ScheduledDefrag",
-            "\Microsoft\Windows\Diagnosis\Scheduled",
-            "\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload"
+            "\Microsoft\Windows\Diagnosis\Scheduled"
           )
           foreach ($task in $tasks) {
               schtasks /Change /TN $task /Disable 2>$null | Out-Null
           }
 
-          # ---------- 13) HIBERNATION / POWER / VISUAL ----------
+          # ---------- 12) HIBERNATION / POWER ----------
           Write-Host "Disabling hibernation..." -ForegroundColor Yellow
           powercfg -h off 2>$null | Out-Null
           powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null | Out-Null
 
-          # ---------- 14) DISM CLEANUP ----------
+          # ---------- 13) DISM CLEANUP ----------
           Write-Host "Running DISM component cleanup..." -ForegroundColor Yellow
           Dism.exe /Online /Cleanup-Image /StartComponentCleanup 2>$null | Out-Null
-          Dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase 2>$null | Out-Null
 
-          # ---------- 15) EVENT LOG TEMİZLİĞİ ----------
+          # ---------- 14) EVENT LOG TEMİZLİĞİ ----------
           Write-Host "Clearing event logs..." -ForegroundColor Yellow
           wevtutil el 2>$null | ForEach-Object { wevtutil cl "$_" 2>$null | Out-Null }
 
-          # ---------- 16) DISK OPTIMIZE ----------
+          # ---------- 15) DISK OPTIMIZE ----------
           Write-Host "Optimizing volume..." -ForegroundColor Yellow
           Optimize-Volume -DriveLetter C -ReTrim -ErrorAction SilentlyContinue 2>$null | Out-Null
 
@@ -421,19 +393,84 @@ jobs:
 
       - name: Install Tailscale
         run: |
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $ErrorActionPreference = 'Continue'
+          $tsUrls = @(
+            "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi",
+            "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
+          )
           $installerPath = "$env:TEMP\tailscale.msi"
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
-          Remove-Item $installerPath -Force
+          $downloaded = $false
+          foreach ($url in $tsUrls) {
+              try {
+                  Invoke-WebRequest -Uri $url -OutFile $installerPath -UseBasicParsing -ErrorAction Stop
+                  if ((Test-Path $installerPath) -and ((Get-Item $installerPath).Length -gt 5MB)) {
+                      $downloaded = $true
+                      Write-Host "Downloaded from: $url" -ForegroundColor Green
+                      break
+                  }
+              } catch {
+                  Write-Host "Failed to download from $url" -ForegroundColor Yellow
+              }
+          }
+          if (-not $downloaded) {
+              Write-Error "Tailscale MSI download failed"
+              exit 1
+          }
+
+          $logPath = "$env:TEMP\tailscale-install.log"
+          $proc = Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart", "/L*v", "`"$logPath`"" -Wait -PassThru
+          Write-Host "MSI exit code: $($proc.ExitCode)"
+
+          $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
+          $retries = 0
+          while (-not (Test-Path $tsExe) -and $retries -lt 30) {
+              Start-Sleep -Seconds 2
+              $retries++
+          }
+
+          if (-not (Test-Path $tsExe)) {
+              Write-Host "MSI install did not produce tailscale.exe. Attempting repair..." -ForegroundColor Yellow
+              $proc2 = Start-Process msiexec.exe -ArgumentList "/fa", "`"$installerPath`"", "/quiet", "/norestart" -Wait -PassThru
+              Start-Sleep -Seconds 10
+              $retries = 0
+              while (-not (Test-Path $tsExe) -and $retries -lt 30) {
+                  Start-Sleep -Seconds 2
+                  $retries++
+              }
+          }
+
+          if (-not (Test-Path $tsExe)) {
+              Write-Host "MSI repair failed. Trying winget fallback..." -ForegroundColor Yellow
+              try {
+                  winget install --id Tailscale.Tailscale --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+              } catch {}
+              $retries = 0
+              while (-not (Test-Path $tsExe) -and $retries -lt 30) {
+                  Start-Sleep -Seconds 2
+                  $retries++
+              }
+          }
+
+          if (-not (Test-Path $tsExe)) {
+              Write-Error "Tailscale could not be installed by any method"
+              exit 1
+          }
+
+          Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
+          Write-Host "Tailscale installed successfully: $tsExe" -ForegroundColor Green
 
       - name: Establish Tailscale Connection
         run: |
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+          $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
+          if (-not (Test-Path $tsExe)) {
+              Write-Error "tailscale.exe not found at $tsExe - install step failed"
+              exit 1
+          }
+          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
           $tsIP = $null
           $retries = 0
           while (-not $tsIP -and $retries -lt 10) {
-              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+              $tsIP = & $tsExe ip -4
               Start-Sleep -Seconds 5
               $retries++
           }
