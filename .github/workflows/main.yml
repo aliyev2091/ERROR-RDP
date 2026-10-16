@@ -9,20 +9,113 @@ jobs:
     timeout-minutes: 3600
 
     steps:
-      - name: Show Processor Information
+      - name: Show Complete System Information
         run: |
-          Write-Host "`n==================== PROCESSOR INFORMATION ====================" -ForegroundColor Cyan
+          Write-Host "`n==================== SYSTEM INFORMATION ====================" -ForegroundColor Cyan
+
+          $os = Get-CimInstance Win32_OperatingSystem
+          Write-Host "`n--- OPERATING SYSTEM ---" -ForegroundColor Yellow
+          Write-Host "OS Name         : $($os.Caption)"
+          Write-Host "Version         : $($os.Version)"
+          Write-Host "Build           : $($os.BuildNumber)"
+          Write-Host "Architecture    : $($os.OSArchitecture)"
+          Write-Host "Install Date    : $($os.InstallDate)"
+          Write-Host "Last Boot       : $($os.LastBootUpTime)"
+
           $cpu = Get-CimInstance Win32_Processor
-          Write-Host "Processor Name           : $($cpu.Name)"
-          Write-Host "Manufacturer             : $($cpu.Manufacturer)"
-          Write-Host "Number of Cores          : $($cpu.NumberOfCores)"
-          Write-Host "Logical Processors       : $($cpu.NumberOfLogicalProcessors)"
-          Write-Host "Max Clock Speed (MHz)    : $($cpu.MaxClockSpeed)"
-          Write-Host "Current Clock Speed (MHz): $($cpu.CurrentClockSpeed)"
-          Write-Host "Architecture             : $($cpu.Architecture)"
-          Write-Host "Socket Designation       : $($cpu.SocketDesignation)"
-          Write-Host "Processor ID             : $($cpu.ProcessorId)"
-          Write-Host "==============================================================`n" -ForegroundColor Cyan
+          Write-Host "`n--- PROCESSOR ---" -ForegroundColor Yellow
+          Write-Host "Name              : $($cpu.Name)"
+          Write-Host "Manufacturer      : $($cpu.Manufacturer)"
+          Write-Host "Cores             : $($cpu.NumberOfCores)"
+          Write-Host "Logical Processors: $($cpu.NumberOfLogicalProcessors)"
+          Write-Host "Max Clock (MHz)   : $($cpu.MaxClockSpeed)"
+          Write-Host "Current Clock MHz : $($cpu.CurrentClockSpeed)"
+          Write-Host "Architecture      : $($cpu.Architecture)"
+          Write-Host "L2 Cache (KB)     : $($cpu.L2CacheSize)"
+          Write-Host "L3 Cache (KB)     : $($cpu.L3CacheSize)"
+
+          Write-Host "`n--- MEMORY ---" -ForegroundColor Yellow
+          $totalRam = [math]::Round($os.TotalVisibleMemorySize / 1MB, 2)
+          $freeRam  = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
+          Write-Host "Total RAM      : $totalRam GB"
+          Write-Host "Free RAM       : $freeRam GB"
+          $ramSticks = Get-CimInstance Win32_PhysicalMemory
+          $i = 1
+          foreach ($stick in $ramSticks) {
+              $sizeGB = [math]::Round($stick.Capacity / 1GB, 2)
+              Write-Host "Slot $i         : $sizeGB GB | $($stick.Speed) MHz | $($stick.Manufacturer) | $($stick.PartNumber)"
+              $i++
+          }
+
+          Write-Host "`n--- STORAGE (PHYSICAL) ---" -ForegroundColor Yellow
+          try {
+              $physicalDisks = Get-PhysicalDisk -ErrorAction Stop
+              foreach ($pd in $physicalDisks) {
+                  $sizeGB = [math]::Round($pd.Size / 1GB, 2)
+                  $mediaType = $pd.MediaType
+                  if (-not $mediaType -or $mediaType -eq "Unspecified") {
+                      if ($pd.BusType -eq "NVMe") { $mediaType = "SSD (NVMe)" }
+                      elseif ($pd.BusType -eq "SATA") { $mediaType = "SSD/HDD (SATA)" }
+                      elseif ($pd.BusType -eq "RAID") { $mediaType = "Virtual (RAID)" }
+                      else { $mediaType = "Unknown" }
+                  }
+                  Write-Host "Disk $($pd.DeviceId)         : $($pd.FriendlyName)"
+                  Write-Host "                 Size  : $sizeGB GB"
+                  Write-Host "                 Type  : $mediaType"
+                  Write-Host "                 Bus   : $($pd.BusType)"
+                  Write-Host "                 Health: $($pd.HealthStatus)"
+              }
+          } catch {
+              Write-Host "Physical disk info unavailable: $_" -ForegroundColor Yellow
+          }
+
+          Write-Host "`n--- STORAGE (LOGICAL DRIVES) ---" -ForegroundColor Yellow
+          $logicalDisks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3"
+          foreach ($ld in $logicalDisks) {
+              $totalGB = [math]::Round($ld.Size / 1GB, 2)
+              $freeGB  = [math]::Round($ld.FreeSpace / 1GB, 2)
+              $usedGB  = [math]::Round($totalGB - $freeGB, 2)
+              Write-Host "Drive $($ld.DeviceID)       : $totalGB GB Total | $usedGB GB Used | $freeGB GB Free"
+          }
+
+          Write-Host "`n--- GRAPHICS ---" -ForegroundColor Yellow
+          $gpus = Get-CimInstance Win32_VideoController
+          foreach ($gpu in $gpus) {
+              $vram = "N/A"
+              if ($gpu.AdapterRAM) { $vram = [math]::Round($gpu.AdapterRAM / 1GB, 2) }
+              Write-Host "GPU            : $($gpu.Name)"
+              Write-Host "  VRAM         : $vram GB"
+              Write-Host "  Driver       : $($gpu.DriverVersion)"
+              Write-Host "  Resolution   : $($gpu.CurrentHorizontalResolution)x$($gpu.CurrentVerticalResolution)"
+          }
+
+          Write-Host "`n--- MOTHERBOARD & BIOS ---" -ForegroundColor Yellow
+          $mb   = Get-CimInstance Win32_BaseBoard
+          $bios = Get-CimInstance Win32_BIOS
+          $cs   = Get-CimInstance Win32_ComputerSystem
+          Write-Host "Manufacturer   : $($cs.Manufacturer)"
+          Write-Host "Model          : $($cs.Model)"
+          Write-Host "Motherboard    : $($mb.Manufacturer) $($mb.Product)"
+          Write-Host "BIOS           : $($bios.Manufacturer) $($bios.SMBIOSBIOSVersion)"
+          Write-Host "Serial         : $($bios.SerialNumber)"
+
+          Write-Host "`n--- NETWORK ---" -ForegroundColor Yellow
+          $adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+          foreach ($ad in $adapters) {
+              Write-Host "Adapter        : $($ad.Name) | $($ad.InterfaceDescription)"
+              Write-Host "  Speed        : $($ad.LinkSpeed)"
+              Write-Host "  MAC          : $($ad.MacAddress)"
+          }
+          $ips = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.*' }
+          foreach ($ip in $ips) {
+              Write-Host "  IP           : $($ip.IPAddress) ($($ip.InterfaceAlias))"
+          }
+
+          $uptime = (Get-Date) - $os.LastBootUpTime
+          Write-Host "`n--- UPTIME ---" -ForegroundColor Yellow
+          Write-Host "Uptime         : $($uptime.Days)d $($uptime.Hours)h $($uptime.Minutes)m"
+
+          Write-Host "`n============================================================`n" -ForegroundColor Cyan
 
       - name: Install Tailscale
         run: |
@@ -175,7 +268,7 @@ jobs:
             "EntAppSvc","WorkFolders","DusmSvc","FrameServer","RmSvc","CscService",
             "PrintWorkflowUserSvc","PrintDeviceConfigurationService","WiaRpc","stisvc",
             "HvHost","vmicvss","vmicheartbeat","vmickvpexchange","vmicrdv","vmicshutdown","vmictimesync","vmicvmsession",
-            "WpcMonSvc","WManSvc","NcaSvc"
+            "WManSvc","NcaSvc"
           )
           foreach ($svc in $servicesToDisable) {
               try { Stop-Service -Name $svc -ErrorAction SilentlyContinue } catch {}
@@ -378,6 +471,44 @@ jobs:
           $ramUsed = [math]::Round($ramTotal - $ramFree, 2)
           Write-Host "RAM Total: $ramTotal GB | Free: $ramFree GB | Used: $ramUsed GB"
           Write-Host "===========================================`n" -ForegroundColor Cyan
+          exit 0
+
+      - name: Install Chrome (Post-Cleanup)
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $chromeExe64 = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
+          $chromeExe32 = "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe"
+          if ((Test-Path $chromeExe64) -or (Test-Path $chromeExe32)) {
+              Write-Host "Chrome already present." -ForegroundColor Green
+              exit 0
+          }
+
+          Write-Host "Downloading Chrome standalone installer..." -ForegroundColor Yellow
+          $url = "https://dl.google.com/chrome/install/standalonesetup64.exe"
+          $out = "$env:TEMP\chrome_installer.exe"
+          $ok = $false
+          try {
+              Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing -ErrorAction Stop
+              if ((Test-Path $out) -and ((Get-Item $out).Length -gt 10MB)) { $ok = $true }
+          } catch {
+              Write-Host "Direct download failed: $_" -ForegroundColor Yellow
+          }
+
+          if ($ok) {
+              Write-Host "Installing Chrome silently..." -ForegroundColor Yellow
+              Start-Process $out -ArgumentList "/silent", "/install" -Wait
+              Remove-Item $out -Force -ErrorAction SilentlyContinue
+          } else {
+              Write-Host "Trying winget fallback..." -ForegroundColor Yellow
+              try { winget install --id Google.Chrome --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null } catch {}
+          }
+
+          Start-Sleep 5
+          if ((Test-Path $chromeExe64) -or (Test-Path $chromeExe32)) {
+              Write-Host "Chrome installed successfully." -ForegroundColor Green
+          } else {
+              Write-Host "Chrome not detected after install, but continuing." -ForegroundColor Yellow
+          }
           exit 0
 
       - name: Verify RDP Accessibility
