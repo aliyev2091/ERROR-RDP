@@ -101,19 +101,19 @@ jobs:
             "Microsoft.MPEG2VideoExtension","Microsoft.RawImageExtension","Microsoft.AVCEncoderVideoExtension"
           )
           foreach ($app in $safeToRemove) {
-              try { Get-AppxPackage -Name $app | Remove-AppxPackage 2>$null } catch {}
-              try { Get-AppxPackage -AllUsers -Name $app | Remove-AppxPackage -AllUsers 2>$null } catch {}
-              try { Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $app } | Remove-AppxProvisionedPackage -Online 2>$null | Out-Null } catch {}
+              try { Get-AppxPackage -Name $app | Remove-AppxPackage } catch {}
+              try { Get-AppxPackage -AllUsers -Name $app | Remove-AppxPackage -AllUsers } catch {}
+              try { Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $app } | Remove-AppxProvisionedPackage -Online } catch {}
           }
 
           Write-Host "Removing Edge and OneDrive..." -ForegroundColor Yellow
           Get-ChildItem "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\*\Installer\setup.exe", "$env:ProgramFiles\Microsoft\Edge\Application\*\Installer\setup.exe" -ErrorAction SilentlyContinue | ForEach-Object {
-              Start-Process $_.FullName -ArgumentList "--uninstall","--system-level","--force-uninstall" -Wait -ErrorAction SilentlyContinue
+              Start-Process $_.FullName -ArgumentList "--uninstall","--system-level","--force-uninstall" -Wait
           }
           Remove-Item "${env:ProgramFiles(x86)}\Microsoft\Edge","$env:ProgramFiles\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
-          taskkill /f /im OneDrive.exe 2>$null | Out-Null
-          if (Test-Path "$env:SystemRoot\SysWOW64\OneDriveSetup.exe") { Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue }
-          if (Test-Path "$env:SystemRoot\System32\OneDriveSetup.exe") { Start-Process "$env:SystemRoot\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue }
+          taskkill /f /im OneDrive.exe 2>$null
+          if (Test-Path "$env:SystemRoot\SysWOW64\OneDriveSetup.exe") { Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait }
+          if (Test-Path "$env:SystemRoot\System32\OneDriveSetup.exe") { Start-Process "$env:SystemRoot\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait }
 
           function Nuke-Path($path) {
               if (Test-Path $path) {
@@ -173,17 +173,15 @@ jobs:
             "DoSvc","wuauserv","UsoSvc","WaaSMedicSvc",
             "Spooler","PhoneSvc","TapiSrv","SCardSvr","ScDeviceEnum",
             "EntAppSvc","WorkFolders",
-            "DusmSvc","FrameServer","Fax","RmSvc","CscService",
-            "Fax","WerSvc","SessionEnv","TermService","UmRdpService","RemoteAccess"
-          ) | Where-Object { $_ -notin @("TermService","UmRdpService","SessionEnv","RemoteAccess") }
+            "DusmSvc","FrameServer","RmSvc","CscService"
+          )
           foreach ($svc in $servicesToDisable) {
-              try { Stop-Service -Name $svc -ErrorAction SilentlyContinue 2>$null } catch {}
-              try { Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue 2>$null } catch {}
+              try { Stop-Service -Name $svc -ErrorAction SilentlyContinue } catch {}
+              try { Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue } catch {}
               sc.exe config $svc start= disabled 2>$null | Out-Null
           }
 
           reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Features" /v "TamperProtection" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Features" /v "TamperProtectionSource" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Services\WinDefend" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Services\WdNisSvc" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Services\Sense" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
@@ -192,8 +190,6 @@ jobs:
           reg add "HKLM\SYSTEM\CurrentControlSet\Services\wscsvc" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Services\MpDefenderCoreService" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Services\WdFilter" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Services\WdBoot" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Services\WdNisDrv" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
 
           foreach ($keepSvc in @(
               "TermService","UmRdpService","SessionEnv","RemoteAccess",
@@ -207,8 +203,8 @@ jobs:
               "EventLog","EventSystem","Schedule","ProfSvc","gpsvc","Winmgmt",
               "Wlansvc","DPS","WdiServiceHost","WdiSystemHost","CryptSvc","KeyIso","SamSs"
           )) {
-              try { Set-Service -Name $keepSvc -StartupType Automatic -ErrorAction SilentlyContinue 2>$null } catch {}
-              try { Start-Service -Name $keepSvc -ErrorAction SilentlyContinue 2>$null } catch {}
+              try { Set-Service -Name $keepSvc -StartupType Automatic -ErrorAction SilentlyContinue } catch {}
+              try { Start-Service -Name $keepSvc -ErrorAction SilentlyContinue } catch {}
           }
 
           $nukeList = @(
@@ -223,7 +219,7 @@ jobs:
           )
           foreach ($p in $nukeList) { Nuke-Path $p }
 
-          try { Stop-Service WSearch -ErrorAction SilentlyContinue 2>$null } catch {}
+          try { Stop-Service WSearch -ErrorAction SilentlyContinue } catch {}
           Nuke-Path "C:\ProgramData\Microsoft\Search\Data"
           Nuke-Path "C:\Windows.old"
           Nuke-Path "C:\Recovery\WindowsRE"
@@ -247,54 +243,40 @@ jobs:
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SystemPaneSuggestionsEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SilentInstalledAppsEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" /v "AllowTelemetry" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection" /v "AllowTelemetry" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Services\SgrmBroker" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "LargeSystemCache" /t REG_DWORD /d 1 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "DisablePagingExecutive" /t REG_DWORD /d 1 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "ClearPageFileAtShutdown" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" /v "EnablePrefetcher" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" /v "EnableSuperfetch" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "SystemPages" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "NonPagedPoolSize" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "PagedPoolSize" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "PoolUsageMaximum" /t REG_DWORD /d 40 /f >$null 2>&1
           reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v "EnableLUA" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v "ConsentPromptBehaviorAdmin" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v "NoAutoUpdate" /t REG_DWORD /d 1 /f >$null 2>&1
           reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\VisualFXSetting" /v "VisualFXSetting" /t REG_DWORD /d 2 /f >$null 2>&1
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v "VisualFXSetting" /t REG_DWORD /d 2 /f >$null 2>&1
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v "fDenyTSConnections" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v "NoInstrumentation" /t REG_DWORD /d 1 /f >$null 2>&1
           reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v "DisableAntiSpyware" /t REG_DWORD /d 1 /f >$null 2>&1
           reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" /v "DisableRealtimeMonitoring" /t REG_DWORD /d 1 /f >$null 2>&1
-          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" /v "EnableSmartScreen" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\AppHost" /v "EnableWebContentEvaluation" /t REG_DWORD /d 0 /f >$null 2>&1
 
           $tasks = @(
             "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
             "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
             "\Microsoft\Windows\Application Experience\StartupAppTask",
-            "\Microsoft\Windows\Application Experience\PcaPatchDbTask",
             "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
             "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip",
-            "\Microsoft\Windows\Customer Experience Improvement Program\KernelCeipTask",
             "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector",
             "\Microsoft\Windows\Feedback\Siuf\DmClient",
-            "\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload",
             "\Microsoft\Windows\Windows Error Reporting\QueueReporting",
-            "\Microsoft\Windows\Autochk\Proxy","\Microsoft\Windows\CloudExperienceHost\CreateObjectTask",
-            "\Microsoft\Windows\DiskFootprint\Diagnostics","\Microsoft\Windows\DiskFootprint\StorageSense",
-            "\Microsoft\Windows\Maintenance\WinSAT","\Microsoft\Windows\PI\Sqm-Tasks",
-            "\Microsoft\Windows\Power Efficiency Diagnostics\AnalyzeSystem",
-            "\Microsoft\Windows\Registry\RegIdleBackup","\Microsoft\Windows\Servicing\StartComponentCleanup",
+            "\Microsoft\Windows\Autochk\Proxy",
+            "\Microsoft\Windows\DiskFootprint\Diagnostics",
+            "\Microsoft\Windows\Maintenance\WinSAT",
+            "\Microsoft\Windows\PI\Sqm-Tasks",
+            "\Microsoft\Windows\Registry\RegIdleBackup",
             "\Microsoft\Windows\Sysmain\HybridDriveCachePrepopulate",
             "\Microsoft\Windows\Sysmain\HybridDriveCacheRebalance",
-            "\Microsoft\Windows\Sysmain\ResPriStaticDbSync","\Microsoft\Windows\Sysmain\WsSwapAssessmentTask",
             "\Microsoft\Windows\Time Synchronization\SynchronizeTime",
-            "\Microsoft\Windows\UPnP\UPnPHostConfig","\Microsoft\Windows\WDI\ResolutionHost",
-            "\Microsoft\Windows\Windows Filtering Platform\BfeOnServiceStartTypeChange",
+            "\Microsoft\Windows\UPnP\UPnPHostConfig",
+            "\Microsoft\Windows\WDI\ResolutionHost",
             "\Microsoft\Windows\Workplace Join\Automatic-Device-Join",
-            "\Microsoft\Windows\Defrag\ScheduledDefrag","\Microsoft\Windows\Diagnosis\Scheduled"
+            "\Microsoft\Windows\Defrag\ScheduledDefrag",
+            "\Microsoft\Windows\Diagnosis\Scheduled"
           )
           foreach ($task in $tasks) { schtasks /Change /TN $task /Disable 2>$null | Out-Null }
 
@@ -317,14 +299,14 @@ jobs:
               "WinHttpAutoProxySvc","RpcSs","DcomLaunch","Dhcp","Wlansvc","DPS","WdiServiceHost","WdiSystemHost",
               "CryptSvc","KeyIso","SamSs"
           )) {
-              try { Set-Service -Name $svc -StartupType Automatic -ErrorAction SilentlyContinue 2>$null } catch {}
-              try { Start-Service -Name $svc -ErrorAction SilentlyContinue 2>$null } catch {}
+              try { Set-Service -Name $svc -StartupType Automatic -ErrorAction SilentlyContinue } catch {}
+              try { Start-Service -Name $svc -ErrorAction SilentlyContinue } catch {}
           }
           Start-Sleep 3
-          try { Stop-Service Tailscale -Force -ErrorAction SilentlyContinue 2>$null } catch {}
+          try { Stop-Service Tailscale -Force -ErrorAction SilentlyContinue } catch {}
           Start-Sleep 3
-          try { Set-Service Tailscale -StartupType Automatic -ErrorAction SilentlyContinue 2>$null } catch {}
-          try { Start-Service Tailscale -ErrorAction SilentlyContinue 2>$null } catch {}
+          try { Set-Service Tailscale -StartupType Automatic -ErrorAction SilentlyContinue } catch {}
+          try { Start-Service Tailscale -ErrorAction SilentlyContinue } catch {}
           Start-Sleep 5
           $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
           $tsIP = $null; $r = 0
@@ -333,148 +315,28 @@ jobs:
           Write-Host "Tailscale recovered: $tsIP" -ForegroundColor Green
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
-      - name: Ultra Memory Optimization
+      - name: Memory Optimization
         run: |
-          Write-Host "`n========== ULTRA MEMORY OPTIMIZATION ==========" -ForegroundColor Cyan
+          Write-Host "`n========== MEMORY OPTIMIZATION ==========" -ForegroundColor Cyan
 
-          # 1) Defender servislerini zorla durdur
-          Write-Host "Force-stopping Defender services..." -ForegroundColor Yellow
-          foreach ($svc in @("WinDefend","WdNisSvc","Sense","MsSense","SecurityHealthService","wscsvc","MpDefenderCoreService","SgrmBroker","WdBoot","WdFilter","WdNisDrv")) {
-              try { sc.exe stop $svc 2>$null | Out-Null } catch {}
-              try { sc.exe config $svc start= disabled 2>$null | Out-Null } catch {}
+          # Defender servislerini zorla durdur
+          foreach ($svc in @("WinDefend","WdNisSvc","Sense","MsSense","SecurityHealthService","wscsvc","MpDefenderCoreService","SgrmBroker","WdFilter")) {
+              sc.exe stop $svc 2>$null | Out-Null
+              sc.exe config $svc start= disabled 2>$null | Out-Null
           }
 
-          # 2) Windows Search ve gereksiz servisleri durdur
-          foreach ($svc in @("WSearch","SysMain","WerSvc","DiagTrack","dmwappushservice","DoSvc","wuauserv","UsoSvc","WaaSMedicSvc","BITS","MapsBroker","RetailDemo")) {
-              try { sc.exe stop $svc 2>$null | Out-Null } catch {}
+          # Gereksiz process'leri öldür
+          foreach ($proc in @("SearchIndexer","SearchProtocolHost","SearchFilterHost","SecurityHealthSystray","SecurityHealthService","MpCmdRun","MpDefenderCoreService","smartscreen","Widgets","WidgetService","PhoneExperienceHost","YourPhone","CrossDeviceService","OneDrive")) {
+              try { Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue } catch {}
           }
 
-          # 3) EmptyWorkingSet ile tüm process'lerin RAM'ini boşalt
-          Write-Host "Trimming working sets of all processes..." -ForegroundColor Yellow
-          $sig = @'
-using System;
-using System.Runtime.InteropServices;
-public class MemApi {
-    [DllImport("psapi.dll")] public static extern bool EmptyWorkingSet(IntPtr hProcess);
-    [DllImport("kernel32.dll")] public static extern IntPtr OpenProcess(int access, bool inherit, int pid);
-    [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr handle);
-}
-'@
-          try { Add-Type -TypeDefinition $sig -ErrorAction Stop } catch {}
-          $trimmed = 0
-          Get-Process -ErrorAction SilentlyContinue | ForEach-Object {
-              try {
-                  $h = [MemApi]::OpenProcess(0x1F0FFF, $false, $_.Id)
-                  if ($h -ne [IntPtr]::Zero) {
-                      [MemApi]::EmptyWorkingSet($h) | Out-Null
-                      [MemApi]::CloseHandle($h) | Out-Null
-                      $trimmed++
-                  }
-              } catch {}
-          }
-          Write-Host "Trimmed $trimmed processes" -ForegroundColor Green
-
-          # 4) Standby memory listesini temizle (NtSetSystemInformation)
-          Write-Host "Clearing standby memory list..." -ForegroundColor Yellow
-          $sig2 = @'
-using System;
-using System.Runtime.InteropServices;
-public class SysInfo {
-    [DllImport("ntdll.dll")] public static extern int NtSetSystemInformation(int InfoClass, IntPtr Info, int Length);
-    [DllImport("advapi32.dll", SetLastError=true)] public static extern bool OpenProcessToken(IntPtr h, uint acc, out IntPtr tok);
-    [DllImport("advapi32.dll", SetLastError=true)] public static extern bool LookupPrivilegeValue(string host, string name, out long luid);
-    [DllImport("advapi32.dll", SetLastError=true)] public static extern bool AdjustTokenPrivileges(IntPtr tok, bool dis, ref TOKEN_PRIVILEGES newst, int len, IntPtr prev, IntPtr relen);
-    [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
-    [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);
-    [StructLayout(LayoutKind.Sequential, Pack=1)] public struct TOKEN_PRIVILEGES { public int Count; public long Luid; public int Attr; }
-    public static bool EnablePrivilege(string name) {
-        IntPtr tok;
-        if (!OpenProcessToken(GetCurrentProcess(), 0x0020 | 0x0008, out tok)) return false;
-        long luid;
-        if (!LookupPrivilegeValue(null, name, out luid)) { CloseHandle(tok); return false; }
-        TOKEN_PRIVILEGES tp = new TOKEN_PRIVILEGES();
-        tp.Count = 1; tp.Luid = luid; tp.Attr = 0x00000002;
-        bool ok = AdjustTokenPrivileges(tok, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
-        CloseHandle(tok);
-        return ok;
-    }
-    public static int ClearStandby() {
-        // SystemMemoryListInformation = 0x50, MemoryPurgeStandbyList = 4
-        IntPtr p = Marshal.AllocHGlobal(4);
-        Marshal.WriteInt32(p, 4);
-        int r = NtSetSystemInformation(0x50, p, 4);
-        Marshal.FreeHGlobal(p);
-        return r;
-    }
-}
-'@
-          try {
-              Add-Type -TypeDefinition $sig2 -ErrorAction Stop
-              [SysInfo]::EnablePrivilege("SeProfileSingleProcessPrivilege") | Out-Null
-              $r = [SysInfo]::ClearStandby()
-              Write-Host "Standby clear result: $r (0 = success)" -ForegroundColor Green
-          } catch {
-              Write-Host "Standby clear skipped: $_" -ForegroundColor Yellow
+          # Ek servisler
+          foreach ($svc in @("WSearch","SysMain","WerSvc","DiagTrack","dmwappushservice","BITS","MapsBroker","RetailDemo","DusmSvc","FrameServer")) {
+              sc.exe stop $svc 2>$null | Out-Null
           }
 
-          # 5) File system cache'i küçült (SetSystemFileCacheSize)
-          Write-Host "Reducing system file cache..." -ForegroundColor Yellow
-          $sig3 = @'
-using System;
-using System.Runtime.InteropServices;
-public class FileCache {
-    [DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetSystemFileCacheSize(IntPtr min, IntPtr max, uint flags);
-    [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
-    [DllImport("advapi32.dll", SetLastError=true)] public static extern bool OpenProcessToken(IntPtr h, uint acc, out IntPtr tok);
-    [DllImport("advapi32.dll", SetLastError=true)] public static extern bool LookupPrivilegeValue(string host, string name, out long luid);
-    [DllImport("advapi32.dll", SetLastError=true)] public static extern bool AdjustTokenPrivileges(IntPtr tok, bool dis, ref TOKEN_PRIVILEGES newst, int len, IntPtr prev, IntPtr relen);
-    [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);
-    [StructLayout(LayoutKind.Sequential, Pack=1)] public struct TOKEN_PRIVILEGES { public int Count; public long Luid; public int Attr; }
-    public static bool Enable(string name) {
-        IntPtr tok;
-        if (!OpenProcessToken(GetCurrentProcess(), 0x0020 | 0x0008, out tok)) return false;
-        long luid;
-        if (!LookupPrivilegeValue(null, name, out luid)) { CloseHandle(tok); return false; }
-        TOKEN_PRIVILEGES tp = new TOKEN_PRIVILEGES();
-        tp.Count = 1; tp.Luid = luid; tp.Attr = 0x00000002;
-        bool ok = AdjustTokenPrivileges(tok, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
-        CloseHandle(tok);
-        return ok;
-    }
-    public static bool SetCache(long bytes) {
-        IntPtr m = new IntPtr(bytes);
-        return SetSystemFileCacheSize(m, m, 0);
-    }
-}
-'@
-          try {
-              Add-Type -TypeDefinition $sig3 -ErrorAction Stop
-              [FileCache]::Enable("SeIncreaseQuotaPrivilege") | Out-Null
-              $ok = [FileCache]::SetCache(67108864)  # 64 MB
-              Write-Host "File cache reduced: $ok" -ForegroundColor Green
-          } catch {
-              Write-Host "File cache reduction skipped: $_" -ForegroundColor Yellow
-          }
+          Start-Sleep 5
 
-          # 6) Gereksiz process'leri sonlandır
-          Write-Host "Killing non-essential processes..." -ForegroundColor Yellow
-          foreach ($proc in @("SearchIndexer","SearchProtocolHost","SearchFilterHost","SecurityHealthSystray","SecurityHealthService","MpCmdRun","MpDefenderCoreService","smartscreen","OneDrive","Widgets","WidgetService","PhoneExperienceHost","YourPhone","CrossDeviceService")) {
-              try { Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue 2>$null } catch {}
-          }
-
-          # 7) Tekrar working set trim
-          Start-Sleep 3
-          Get-Process -ErrorAction SilentlyContinue | ForEach-Object {
-              try {
-                  $h = [MemApi]::OpenProcess(0x1F0FFF, $false, $_.Id)
-                  if ($h -ne [IntPtr]::Zero) {
-                      [MemApi]::EmptyWorkingSet($h) | Out-Null
-                      [MemApi]::CloseHandle($h) | Out-Null
-                  }
-              } catch {}
-          }
-
-          Start-Sleep 3
           Write-Host "`n========== DISK & MEMORY SUMMARY ==========" -ForegroundColor Cyan
           $disk = Get-PSDrive C
           $freeGB = [math]::Round($disk.Free / 1GB, 2)
