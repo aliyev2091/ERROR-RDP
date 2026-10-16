@@ -31,72 +31,64 @@ jobs:
           Write-Host "==============================================================`n" -ForegroundColor Cyan
 
       # ───────────────────────────────────────────────
-      # 2. Fast Cleanup - Remove Unnecessary Apps
+      # 2. Aggressive but Safe Cleanup (RDP-safe)
       # ───────────────────────────────────────────────
-      - name: Fast Cleanup Unnecessary Apps
+      - name: Aggressive Safe Cleanup
         run: |
-          Write-Host "`n========== FAST CLEANUP STARTED ==========" -ForegroundColor Yellow
+          Write-Host "`n========== AGGRESSIVE SAFE CLEANUP STARTED ==========" -ForegroundColor Yellow
 
-          # 1. Remove common bloatware Appx packages (very fast)
-          $bloat = @(
+          # --- 1. Remove safe Appx packages (Server'da bulunanlar) ---
+          $safeToRemove = @(
+            "Microsoft.BingWeather",
+            "Microsoft.BingNews",
+            "Microsoft.GetHelp",
+            "Microsoft.Getstarted",
+            "Microsoft.WindowsFeedbackHub",
+            "Microsoft.MicrosoftOfficeHub",
+            "Microsoft.Todos",
+            "Microsoft.PowerAutomateDesktop",
+            "Microsoft.Windows.Photos",
+            "Microsoft.ScreenSketch",
+            "Microsoft.MSPaint",
+            "Microsoft.WindowsCamera",
+            "Microsoft.WindowsAlarms",
+            "Microsoft.WindowsSoundRecorder",
+            "Microsoft.People",
+            "Microsoft.SkypeApp",
+            "Clipchamp.Clipchamp",
             "Microsoft.Xbox*",
-            "Microsoft.XboxGameOverlay",
-            "Microsoft.XboxGamingOverlay",
-            "Microsoft.XboxIdentityProvider",
-            "Microsoft.XboxSpeechToTextOverlay",
             "Microsoft.GamingApp",
             "Microsoft.ZuneMusic",
             "Microsoft.ZuneVideo",
             "Microsoft.YourPhone",
             "Microsoft.WindowsMaps",
-            "Microsoft.WindowsFeedbackHub",
-            "Microsoft.GetHelp",
-            "Microsoft.Getstarted",
-            "Microsoft.MicrosoftOfficeHub",
             "Microsoft.MicrosoftSolitaireCollection",
-            "Microsoft.People",
-            "Microsoft.SkypeApp",
-            "Microsoft.BingNews",
-            "Microsoft.BingWeather",
-            "Microsoft.BingSearch",
-            "Microsoft.Todos",
-            "Microsoft.PowerAutomateDesktop",
-            "Microsoft.Windows.Photos",
-            "Microsoft.WindowsCamera",
-            "Microsoft.WindowsAlarms",
-            "Microsoft.WindowsSoundRecorder",
-            "Microsoft.MSPaint",
-            "Microsoft.ScreenSketch",
-            "Clipchamp.Clipchamp",
             "Microsoft.549981C3F5F10",          # Cortana
-            "Microsoft.Windows.Cortana",
             "MicrosoftTeams",
-            "Microsoft.OneDriveSync",
-            "Microsoft.MicrosoftEdge.Stable",
-            "Microsoft.Edge*",
-            "Microsoft.OneDrive"
+            "Microsoft.OneDriveSync"
           )
 
-          foreach ($app in $bloat) {
+          foreach ($app in $safeToRemove) {
               Get-AppxPackage -Name $app -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue
-              Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $app } | 
+              Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | 
+                  Where-Object { $_.DisplayName -like $app } | 
                   Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
           }
 
-          # 2. Uninstall OneDrive completely (fast)
+          # --- 2. Remove OneDrive completely ---
           Write-Host "Removing OneDrive..."
           taskkill /f /im OneDrive.exe 2>$null
           if (Test-Path "$env:SystemRoot\SysWOW64\OneDriveSetup.exe") {
-              & "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" /uninstall
+              Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue
           }
           if (Test-Path "$env:SystemRoot\System32\OneDriveSetup.exe") {
-              & "$env:SystemRoot\System32\OneDriveSetup.exe" /uninstall
+              Start-Process "$env:SystemRoot\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue
           }
 
-          # 3. Disable unnecessary services (speed boost)
-          $services = @(
+          # --- 3. Disable unnecessary services (RDP + Tailscale korunuyor) ---
+          $servicesToDisable = @(
             "DiagTrack",                # Telemetry
-            "dmwappushservice",         # WAP Push
+            "dmwappushservice",
             "SysMain",                  # Superfetch
             "WSearch",                  # Windows Search
             "XblAuthManager",
@@ -107,25 +99,44 @@ jobs:
             "Fax",
             "RemoteRegistry",
             "RetailDemo",
-            "MapsBroker"
+            "MapsBroker",
+            "WerSvc",                   # Windows Error Reporting
+            "Spooler"                   # Print Spooler (RDP için gerekmez)
           )
 
-          foreach ($svc in $services) {
+          foreach ($svc in $servicesToDisable) {
               Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
               Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
           }
 
-          # 4. Clean temporary files quickly
-          Write-Host "Cleaning temp files..."
+          # --- 4. Clean temporary files ---
+          Write-Host "Cleaning temporary files..."
           Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Prefetch\*" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
 
-          # 5. Disable Windows Tips & Suggestions
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338389Enabled" /t REG_DWORD /d 0 /f >$null
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SoftLandingEnabled" /t REG_DWORD /d 0 /f >$null
+          # --- 5. Disable Windows Tips & Suggestions ---
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338389Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SoftLandingEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SystemPaneSuggestionsEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
 
-          Write-Host "========== FAST CLEANUP COMPLETED ==========`n" -ForegroundColor Green
+          # --- 6. Disable unnecessary scheduled tasks ---
+          $tasks = @(
+            "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
+            "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
+            "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
+            "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip",
+            "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector",
+            "\Microsoft\Windows\Feedback\Siuf\DmClient",
+            "\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload",
+            "\Microsoft\Windows\Windows Error Reporting\QueueReporting"
+          )
+          foreach ($task in $tasks) {
+              schtasks /Change /TN $task /Disable 2>$null
+          }
+
+          Write-Host "========== AGGRESSIVE SAFE CLEANUP COMPLETED ==========`n" -ForegroundColor Green
 
       # ───────────────────────────────────────────────
       # 3. Configure Core RDP Settings
