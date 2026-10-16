@@ -9,15 +9,10 @@ jobs:
     timeout-minutes: 3600
 
     steps:
-      # ───────────────────────────────────────────────
-      # 1. Show Processor Information
-      # ───────────────────────────────────────────────
       - name: Show Processor Information
         run: |
           Write-Host "`n==================== PROCESSOR INFORMATION ====================" -ForegroundColor Cyan
-
           $cpu = Get-CimInstance Win32_Processor
-
           Write-Host "Processor Name           : $($cpu.Name)"
           Write-Host "Manufacturer             : $($cpu.Manufacturer)"
           Write-Host "Number of Cores          : $($cpu.NumberOfCores)"
@@ -27,17 +22,12 @@ jobs:
           Write-Host "Architecture             : $($cpu.Architecture)"
           Write-Host "Socket Designation       : $($cpu.SocketDesignation)"
           Write-Host "Processor ID             : $($cpu.ProcessorId)"
-
           Write-Host "==============================================================`n" -ForegroundColor Cyan
 
-      # ───────────────────────────────────────────────
-      # 2. Aggressive but Safe Cleanup (RDP-safe)
-      # ───────────────────────────────────────────────
       - name: Aggressive Safe Cleanup
         run: |
           Write-Host "`n========== AGGRESSIVE SAFE CLEANUP STARTED ==========" -ForegroundColor Yellow
 
-          # --- 1. Remove safe Appx packages (Server'da bulunanlar) ---
           $safeToRemove = @(
             "Microsoft.BingWeather",
             "Microsoft.BingNews",
@@ -63,7 +53,7 @@ jobs:
             "Microsoft.YourPhone",
             "Microsoft.WindowsMaps",
             "Microsoft.MicrosoftSolitaireCollection",
-            "Microsoft.549981C3F5F10",          # Cortana
+            "Microsoft.549981C3F5F10",
             "MicrosoftTeams",
             "Microsoft.OneDriveSync"
           )
@@ -75,8 +65,6 @@ jobs:
                   Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
           }
 
-          # --- 2. Remove OneDrive completely ---
-          Write-Host "Removing OneDrive..."
           taskkill /f /im OneDrive.exe 2>$null
           if (Test-Path "$env:SystemRoot\SysWOW64\OneDriveSetup.exe") {
               Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue
@@ -85,12 +73,11 @@ jobs:
               Start-Process "$env:SystemRoot\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue
           }
 
-          # --- 3. Disable unnecessary services (RDP + Tailscale korunuyor) ---
           $servicesToDisable = @(
-            "DiagTrack",                # Telemetry
+            "DiagTrack",
             "dmwappushservice",
-            "SysMain",                  # Superfetch
-            "WSearch",                  # Windows Search
+            "SysMain",
+            "WSearch",
             "XblAuthManager",
             "XblGameSave",
             "XboxGipSvc",
@@ -100,8 +87,8 @@ jobs:
             "RemoteRegistry",
             "RetailDemo",
             "MapsBroker",
-            "WerSvc",                   # Windows Error Reporting
-            "Spooler"                   # Print Spooler (RDP için gerekmez)
+            "WerSvc",
+            "Spooler"
           )
 
           foreach ($svc in $servicesToDisable) {
@@ -109,19 +96,15 @@ jobs:
               Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
           }
 
-          # --- 4. Clean temporary files ---
-          Write-Host "Cleaning temporary files..."
           Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Prefetch\*" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
 
-          # --- 5. Disable Windows Tips & Suggestions ---
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338389Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SoftLandingEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SystemPaneSuggestionsEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
 
-          # --- 6. Disable unnecessary scheduled tasks ---
           $tasks = @(
             "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
             "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
@@ -138,79 +121,39 @@ jobs:
 
           Write-Host "========== AGGRESSIVE SAFE CLEANUP COMPLETED ==========`n" -ForegroundColor Green
 
-      # ───────────────────────────────────────────────
-      # 3. Configure Core RDP Settings
-      # ───────────────────────────────────────────────
       - name: Configure Core RDP Settings
         run: |
-          # Enable Remote Desktop and disable Network Level Authentication (if needed)
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
-                             -Name "fDenyTSConnections" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                             -Name "UserAuthentication" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                             -Name "SecurityLayer" -Value 0 -Force
-
-          # Remove any existing rule with the same name to avoid duplication
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
           netsh advfirewall firewall delete rule name="RDP-Tailscale"
-
-          # For testing, allow any incoming connection on port 3389
-          netsh advfirewall firewall add rule name="RDP-Tailscale" `
-            dir=in action=allow protocol=TCP localport=3389
-
-          # (Optional) Restart the Remote Desktop service to ensure changes take effect
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
           Restart-Service -Name TermService -Force
 
-      # ───────────────────────────────────────────────
-      # 4. Create RDP User with Secure Password
-      # ───────────────────────────────────────────────
       - name: Create RDP User with Secure Password
         run: |
-          Add-Type -AssemblyName System.Security
-          $charSet = @{
-              Upper   = [char[]](65..90)
-              Lower   = [char[]](97..122)
-              Number  = [char[]](48..57)
-              Special = ([char[]](33..47) + [char[]](58..64) +
-                         [char[]](91..96) + [char[]](123..126))
-          }
-          $rawPassword = @()
-          $rawPassword += $charSet.Upper | Get-Random -Count 4
-          $rawPassword += $charSet.Lower | Get-Random -Count 4
-          $rawPassword += $charSet.Number | Get-Random -Count 4
-          $rawPassword += $charSet.Special | Get-Random -Count 4
           $password = "Password!?"
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
           New-LocalUser -Name "ERROR-4004" -Password $securePass -AccountNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004"
-
           echo "RDP_CREDS=User: ERROR-4004 | Password: $password" >> $env:GITHUB_ENV
-
           if (-not (Get-LocalUser -Name "ERROR-4004")) {
               Write-Error "User creation failed"
               exit 1
           }
 
-      # ───────────────────────────────────────────────
-      # 5. Install Tailscale
-      # ───────────────────────────────────────────────
       - name: Install Tailscale
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $installerPath = "$env:TEMP\tailscale.msi"
-
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
           Remove-Item $installerPath -Force
 
-      # ───────────────────────────────────────────────
-      # 6. Establish Tailscale Connection
-      # ───────────────────────────────────────────────
       - name: Establish Tailscale Connection
         run: |
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
-
           $tsIP = $null
           $retries = 0
           while (-not $tsIP -and $retries -lt 10) {
@@ -218,20 +161,15 @@ jobs:
               Start-Sleep -Seconds 5
               $retries++
           }
-
           if (-not $tsIP) {
               Write-Error "Tailscale IP not assigned. Exiting."
               exit 1
           }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
-      # ───────────────────────────────────────────────
-      # 7. Verify RDP Accessibility
-      # ───────────────────────────────────────────────
       - name: Verify RDP Accessibility
         run: |
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-
           $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
           if (-not $testResult.TcpTestSucceeded) {
               Write-Error "TCP connection to RDP port 3389 failed"
@@ -239,9 +177,6 @@ jobs:
           }
           Write-Host "TCP connectivity successful!"
 
-      # ───────────────────────────────────────────────
-      # 8. Maintain Connection
-      # ───────────────────────────────────────────────
       - name: Maintain Connection
         run: |
           Write-Host "`n=== RDP ACCESS ==="
@@ -249,7 +184,6 @@ jobs:
           Write-Host "Username: ERROR-4004"
           Write-Host "Password: $(echo $env:RDP_CREDS)"
           Write-Host "==================`n"
-
           while ($true) {
               Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
               Start-Sleep -Seconds 300
