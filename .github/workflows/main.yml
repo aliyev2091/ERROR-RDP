@@ -168,50 +168,61 @@ jobs:
         run: |
           $ProgressPreference = 'SilentlyContinue'
           $msi = "$env:TEMP\tailscale.msi"
+          
+          Write-Host "Downloading Tailscale..."
           Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi -UseBasicParsing
-          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart ALLUSERS=1" -Wait -NoNewWindow
-          Start-Sleep -Seconds 25
-
-          $tsExe = $null
-          $paths = @(
-            "C:\Program Files\Tailscale\tailscale.exe",
-            "C:\Program Files (x86)\Tailscale\tailscale.exe"
-          )
-          foreach ($p in $paths) {
-              if (Test-Path $p) {
-                  $tsExe = $p
-                  break
-              }
+          
+          Write-Host "Installing Tailscale..."
+          $p = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$msi`" /qn /norestart ALLUSERS=1" -Wait -PassThru -NoNewWindow
+          Write-Host "MSI Exit Code: $($p.ExitCode)"
+          
+          Start-Sleep -Seconds 30
+          
+          # Servisi zorla başlat
+          Get-Service -Name "*tail*" -ErrorAction SilentlyContinue | ForEach-Object {
+              Write-Host "Starting service: $($_.Name)"
+              Start-Service $_.Name -ErrorAction SilentlyContinue
           }
-
+          Start-Sleep -Seconds 10
+          
+          # Derin arama
+          Write-Host "Searching for tailscale.exe..."
+          $tsExe = Get-ChildItem -Path "C:\Program Files","C:\Program Files (x86)","C:\ProgramData" -Filter "tailscale.exe" -Recurse -ErrorAction SilentlyContinue -Force | Select-Object -First 1 -ExpandProperty FullName
+          
           if (-not $tsExe) {
-              $tsExe = Get-ChildItem -Path "C:\Program Files","C:\Program Files (x86)" -Filter "tailscale.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+              Write-Host "Still not found, searching broader..."
+              $tsExe = Get-ChildItem -Path "C:\" -Filter "tailscale.exe" -Recurse -ErrorAction SilentlyContinue -Force | Select-Object -First 1 -ExpandProperty FullName
           }
-
+          
           if (-not $tsExe) {
               Write-Error "Tailscale executable not found after install"
+              Get-ChildItem "C:\Program Files" -ErrorAction SilentlyContinue | Select-Object Name
               exit 1
           }
-
+          
           echo "TAILSCALE_EXE=$tsExe" >> $env:GITHUB_ENV
-          Write-Host "Tailscale found at: $tsExe"
+          Write-Host "SUCCESS - Tailscale found at: $tsExe"
 
       - name: Establish Tailscale Connection
         run: |
           $tsExe = $env:TAILSCALE_EXE
-          if (-not (Test-Path $tsExe)) {
-              Write-Error "Tailscale executable not found"
+          if (-not $tsExe -or -not (Test-Path $tsExe)) {
+              Write-Error "Tailscale executable not found: $tsExe"
               exit 1
           }
 
+          Write-Host "Using: $tsExe"
           & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
 
           $tsIP = $null
           $retries = 0
-          while (-not $tsIP -and $retries -lt 20) {
-              $tsIP = & $tsExe ip -4 2>$null
+          while (-not $tsIP -and $retries -lt 25) {
+              try {
+                  $tsIP = & $tsExe ip -4 2>$null
+              } catch {}
               Start-Sleep -Seconds 4
               $retries++
+              Write-Host "Waiting for IP... ($retries)"
           }
           if (-not $tsIP) {
               Write-Error "Tailscale IP not assigned"
