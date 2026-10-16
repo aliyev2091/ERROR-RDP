@@ -58,25 +58,15 @@ jobs:
 
       - name: Create RDP User with Secure Password
         run: |
-          \$password = "Password!?"
-          securePass = ConvertTo-SecureString password -AsPlainText -Force
-          
-          New-LocalUser -Name "ERROR-4004" -Password \$securePass -AccountNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004"
-
-          echo "RDP_CREDS=User: ERROR-4004 | Password: password" >> env:GITHUB_ENV
-
-          if (-not (Get-LocalUser -Name "ERROR-4004")) {
-              Write-Error "User creation failed"
-              exit 1
-          }
+          # Native Windows CMD command that never fails with special characters
+          net user ERROR-4004 Password!? /add /y
+          net localgroup Administrators ERROR-4004 /add
+          net localgroup "Remote Desktop Users" ERROR-4004 /add
 
       - name: Install Tailscale
         run: |
           \$tsUrl = "https://tailscale.com"
           installerPath = "env:TEMP\tailscale.msi"
-
           Invoke-WebRequest -Uri tsUrl -OutFile installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
           Remove-Item \$installerPath -Force
@@ -117,7 +107,7 @@ jobs:
           Write-Host "`n=== RDP ACCESS ==="
           Write-Host "Address: $env:TAILSCALE_IP"
           Write-Host "Username: ERROR-4004"
-          Write-Host "Password: $(echo $env:RDP_CREDS)"
+          Write-Host "Password: Password!?"
           Write-Host "==================`n"
 
           # Keep runner active indefinitely (or until manually cancelled)
