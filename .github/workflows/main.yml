@@ -31,7 +31,104 @@ jobs:
           Write-Host "==============================================================`n" -ForegroundColor Cyan
 
       # ───────────────────────────────────────────────
-      # 2. Configure Core RDP Settings
+      # 2. Fast Cleanup - Remove Unnecessary Apps
+      # ───────────────────────────────────────────────
+      - name: Fast Cleanup Unnecessary Apps
+        run: |
+          Write-Host "`n========== FAST CLEANUP STARTED ==========" -ForegroundColor Yellow
+
+          # 1. Remove common bloatware Appx packages (very fast)
+          $bloat = @(
+            "Microsoft.Xbox*",
+            "Microsoft.XboxGameOverlay",
+            "Microsoft.XboxGamingOverlay",
+            "Microsoft.XboxIdentityProvider",
+            "Microsoft.XboxSpeechToTextOverlay",
+            "Microsoft.GamingApp",
+            "Microsoft.ZuneMusic",
+            "Microsoft.ZuneVideo",
+            "Microsoft.YourPhone",
+            "Microsoft.WindowsMaps",
+            "Microsoft.WindowsFeedbackHub",
+            "Microsoft.GetHelp",
+            "Microsoft.Getstarted",
+            "Microsoft.MicrosoftOfficeHub",
+            "Microsoft.MicrosoftSolitaireCollection",
+            "Microsoft.People",
+            "Microsoft.SkypeApp",
+            "Microsoft.BingNews",
+            "Microsoft.BingWeather",
+            "Microsoft.BingSearch",
+            "Microsoft.Todos",
+            "Microsoft.PowerAutomateDesktop",
+            "Microsoft.Windows.Photos",
+            "Microsoft.WindowsCamera",
+            "Microsoft.WindowsAlarms",
+            "Microsoft.WindowsSoundRecorder",
+            "Microsoft.MSPaint",
+            "Microsoft.ScreenSketch",
+            "Clipchamp.Clipchamp",
+            "Microsoft.549981C3F5F10",          # Cortana
+            "Microsoft.Windows.Cortana",
+            "MicrosoftTeams",
+            "Microsoft.OneDriveSync",
+            "Microsoft.MicrosoftEdge.Stable",
+            "Microsoft.Edge*",
+            "Microsoft.OneDrive"
+          )
+
+          foreach ($app in $bloat) {
+              Get-AppxPackage -Name $app -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue
+              Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $app } | 
+                  Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+          }
+
+          # 2. Uninstall OneDrive completely (fast)
+          Write-Host "Removing OneDrive..."
+          taskkill /f /im OneDrive.exe 2>$null
+          if (Test-Path "$env:SystemRoot\SysWOW64\OneDriveSetup.exe") {
+              & "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" /uninstall
+          }
+          if (Test-Path "$env:SystemRoot\System32\OneDriveSetup.exe") {
+              & "$env:SystemRoot\System32\OneDriveSetup.exe" /uninstall
+          }
+
+          # 3. Disable unnecessary services (speed boost)
+          $services = @(
+            "DiagTrack",                # Telemetry
+            "dmwappushservice",         # WAP Push
+            "SysMain",                  # Superfetch
+            "WSearch",                  # Windows Search
+            "XblAuthManager",
+            "XblGameSave",
+            "XboxGipSvc",
+            "XboxNetApiSvc",
+            "WMPNetworkSvc",
+            "Fax",
+            "RemoteRegistry",
+            "RetailDemo",
+            "MapsBroker"
+          )
+
+          foreach ($svc in $services) {
+              Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+              Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+          }
+
+          # 4. Clean temporary files quickly
+          Write-Host "Cleaning temp files..."
+          Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Prefetch\*" -Force -ErrorAction SilentlyContinue
+
+          # 5. Disable Windows Tips & Suggestions
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338389Enabled" /t REG_DWORD /d 0 /f >$null
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SoftLandingEnabled" /t REG_DWORD /d 0 /f >$null
+
+          Write-Host "========== FAST CLEANUP COMPLETED ==========`n" -ForegroundColor Green
+
+      # ───────────────────────────────────────────────
+      # 3. Configure Core RDP Settings
       # ───────────────────────────────────────────────
       - name: Configure Core RDP Settings
         run: |
@@ -54,17 +151,17 @@ jobs:
           Restart-Service -Name TermService -Force
 
       # ───────────────────────────────────────────────
-      # 3. Create RDP User with Secure Password
+      # 4. Create RDP User with Secure Password
       # ───────────────────────────────────────────────
       - name: Create RDP User with Secure Password
         run: |
           Add-Type -AssemblyName System.Security
           $charSet = @{
-              Upper   = [char[]](65..90)      # A-Z
-              Lower   = [char[]](97..122)     # a-z
-              Number  = [char[]](48..57)      # 0-9
+              Upper   = [char[]](65..90)
+              Lower   = [char[]](97..122)
+              Number  = [char[]](48..57)
               Special = ([char[]](33..47) + [char[]](58..64) +
-                         [char[]](91..96) + [char[]](123..126)) # Special characters
+                         [char[]](91..96) + [char[]](123..126))
           }
           $rawPassword = @()
           $rawPassword += $charSet.Upper | Get-Random -Count 4
@@ -85,7 +182,7 @@ jobs:
           }
 
       # ───────────────────────────────────────────────
-      # 4. Install Tailscale
+      # 5. Install Tailscale
       # ───────────────────────────────────────────────
       - name: Install Tailscale
         run: |
@@ -97,14 +194,12 @@ jobs:
           Remove-Item $installerPath -Force
 
       # ───────────────────────────────────────────────
-      # 5. Establish Tailscale Connection
+      # 6. Establish Tailscale Connection
       # ───────────────────────────────────────────────
       - name: Establish Tailscale Connection
         run: |
-          # Bring up Tailscale with the provided auth key and set a unique hostname
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
 
-          # Wait for Tailscale to assign an IP
           $tsIP = $null
           $retries = 0
           while (-not $tsIP -and $retries -lt 10) {
@@ -120,13 +215,12 @@ jobs:
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
       # ───────────────────────────────────────────────
-      # 6. Verify RDP Accessibility
+      # 7. Verify RDP Accessibility
       # ───────────────────────────────────────────────
       - name: Verify RDP Accessibility
         run: |
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
 
-          # Test connectivity using Test-NetConnection against the Tailscale IP on port 3389
           $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
           if (-not $testResult.TcpTestSucceeded) {
               Write-Error "TCP connection to RDP port 3389 failed"
@@ -135,7 +229,7 @@ jobs:
           Write-Host "TCP connectivity successful!"
 
       # ───────────────────────────────────────────────
-      # 7. Maintain Connection
+      # 8. Maintain Connection
       # ───────────────────────────────────────────────
       - name: Maintain Connection
         run: |
@@ -145,7 +239,6 @@ jobs:
           Write-Host "Password: $(echo $env:RDP_CREDS)"
           Write-Host "==================`n"
 
-          # Keep runner active indefinitely (or until manually cancelled)
           while ($true) {
               Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
               Start-Sleep -Seconds 300
