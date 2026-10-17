@@ -29,61 +29,61 @@ jobs:
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           exit 0
 
-      - name: Firefox'u Sessizce İndir ve Kur
+      - name: Firefox'u Kur ve Masaüstüne Kısayol At
         run: |
-          Write-Host "Firefox indiriliyor ve kuruluyor..."
           $firefoxUrl = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US"
           Invoke-WebRequest -Uri $firefoxUrl -OutFile "$env:TEMP\firefox_installer.exe"
           Start-Process -FilePath "$env:TEMP\firefox_installer.exe" -ArgumentList "/S" -Wait
-          Write-Host "Firefox kuruldu."
+          
+          # Firefox masaüstü kısayolunu oluştur
+          $WshShell = New-Object -ComObject WScript.Shell
+          $Shortcut = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Firefox.lnk")
+          $Shortcut.TargetPath = "C:\Program Files\Mozilla Firefox\firefox.exe"
+          $Shortcut.Save()
           exit 0
 
-      - name: BÜYÜK TEMİZLİK (Masaüstü, Belgeler, Windows Çöpleri)
+      - name: DEV TEMİZLİK (Masaüstü, Uygulamalar, Python/Java, Chrome/Edge)
         run: |
-          # 1. Masaüstündeki Her Şeyi Sil
+          # 1. Masaüstündeki Her Şeyi Sil (Edge, Chrome vs. kısayolları dahil)
           Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           
-          # 2. İndirilenler, Belgeler, Resimler vb. Sıfırla
-          $folders = @("Downloads", "Documents", "Pictures", "Videos", "Music")
-          foreach ($folder in $folders) {
-            Remove-Item -Path "C:\Users\runneradmin\$folder\*" -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item -Path "C:\Users\Public\$folder\*" -Recurse -Force -ErrorAction SilentlyContinue
-          }
+          # (DİKKAT: Belgeler, Resimler, İndirilenler Klasörlerine DOKUNMUYORUZ. Senin dediğin gibi onlar kalsın.)
 
-          # 3. Windows Mağaza Uygulamalarını Söküp At
+          # 2. Devasa Yer Kaplayan Geliştirici Araçlarını (Python, Node, Java vs.) Komple SİL
+          Remove-Item -Path "C:\hostedtoolcache\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # 3. Google Chrome ve Microsoft Edge'i Zorla Kaldır
+          Remove-Item -Path "C:\Program Files\Google\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # 4. Windows Mağaza Uygulamalarını Söküp At
           Get-AppxPackage -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue
           
-          # 4. Hazırda Bekletmeyi Kapat
+          # 5. Hazırda Bekletmeyi Kapat
           powercfg -h off
           
-          # 5. Sistem Geri Yükleme ve Gölge Kopyaları Sil
+          # 6. Sistem Geri Yükleme ve Gölge Kopyaları Sil
           try {
             Disable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
             vssadmin delete shadows /all /quiet
-          } catch {
-            Write-Host "Gölge kopya yok, geçiliyor..."
-          }
+          } catch {}
           
-          # 6. Tüm Geçici Dosyaları Sil
+          # 7. Tüm Geçici (Temp) Dosyalarını Sil
           Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Prefetch\*" -Recurse -Force -ErrorAction SilentlyContinue
 
-          # 7. Defender'ı Kapat
+          # 8. Defender'ı Kapat
           try {
             Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop
             Set-MpPreference -DisableIOAVProtection $true -ErrorAction Stop
-            Write-Host "Defender kapatildi."
-          } catch {
-            Write-Host "Defender zaten kapali veya bulunamadi."
-          }
+          } catch {}
           
-          # KRİTİK NOKTA: Hata kodlarını sıfırla ve başarılı dön!
           exit 0
 
-      - name: Gereksiz Servisleri Kapat (Arka Planı Boşalt)
+      - name: Gereksiz ve Sömüren Servisleri Kapat
         run: |
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc")
           foreach ($svc in $services) {
@@ -112,17 +112,19 @@ jobs:
       - name: Bağlantı Bilgilerini Göster
         run: |
           Write-Host "===================================="
-          Write-Host "   ERROR-4004 ÇIPLAK SİSTEM MODU    "
+          Write-Host "   ERROR-4004 DEV TEMİZLİK MODU     "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
           Write-Host "Kullanici Adi : ERROR-4004"
           Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
           Write-Host "Tarayici      : Firefox (Masaüstünde)"
+          Write-Host "Not: Masaüstü, Edge, Chrome, Python vs. silindi."
+          Write-Host "Not: Belgeler ve İndirilenler korundu."
           Write-Host "===================================="
           exit 0
           
       - name: Sistemi 60 Saat Boyunca Açık Tut
         run: |
-          Write-Host "Sistem temizlendi. 60 saat uyku basliyor..."
+          Write-Host "Sistemde devasa yer acildi. 60 saat uyku basliyor..."
           Start-Sleep -Seconds 216000 
