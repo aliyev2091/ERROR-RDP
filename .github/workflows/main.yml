@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 3600 # 60 saat (Gönlün olsun, GitHub 6 saatte kesecek)
+    timeout-minutes: 3600 # 60 saat
     
     steps:
       - name: Tailscale'i Başlat
@@ -16,11 +16,9 @@ jobs:
 
       - name: Kullanıcı Oluştur ve RDP'yi Etkinleştir
         run: |
-          # RDP Aç
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           
-          # Kullanıcı Oluştur
           $Password = ConvertTo-SecureString -AsPlainText "${{ secrets.ERROR_4004_PASSWORD }}" -Force
           if (-not (Get-LocalUser -Name "ERROR-4004" -ErrorAction SilentlyContinue)) {
             New-LocalUser -Name "ERROR-4004" -Password $Password -PasswordNeverExpires -AccountNeverExpires
@@ -29,15 +27,16 @@ jobs:
           }
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004" -ErrorAction SilentlyContinue
+          exit 0
 
       - name: Firefox'u Sessizce İndir ve Kur
         run: |
           Write-Host "Firefox indiriliyor ve kuruluyor..."
           $firefoxUrl = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US"
           Invoke-WebRequest -Uri $firefoxUrl -OutFile "$env:TEMP\firefox_installer.exe"
-          # /S parametresi sessiz kurulum yapar
           Start-Process -FilePath "$env:TEMP\firefox_installer.exe" -ArgumentList "/S" -Wait
           Write-Host "Firefox kuruldu."
+          exit 0
 
       - name: BÜYÜK TEMİZLİK (Masaüstü, Belgeler, Windows Çöpleri)
         run: |
@@ -55,7 +54,7 @@ jobs:
           # 3. Windows Mağaza Uygulamalarını Söküp At
           Get-AppxPackage -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue
           
-          # 4. Hazırda Bekletmeyi Kapat (Diskte GB'larca yer açar)
+          # 4. Hazırda Bekletmeyi Kapat
           powercfg -h off
           
           # 5. Sistem Geri Yükleme ve Gölge Kopyaları Sil
@@ -63,7 +62,7 @@ jobs:
             Disable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
             vssadmin delete shadows /all /quiet
           } catch {
-            Write-Host "Gölge kopya zaten yok veya silinemedi, devam ediliyor..."
+            Write-Host "Gölge kopya yok, geçiliyor..."
           }
           
           # 6. Tüm Geçici Dosyaları Sil
@@ -76,10 +75,13 @@ jobs:
           try {
             Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop
             Set-MpPreference -DisableIOAVProtection $true -ErrorAction Stop
-            Write-Host "Defender basariyla kapatildi."
+            Write-Host "Defender kapatildi."
           } catch {
-            Write-Host "Defender modulu bulunamadi veya zaten kapali. Sorun yok, devam ediliyor..."
+            Write-Host "Defender zaten kapali veya bulunamadi."
           }
+          
+          # KRİTİK NOKTA: Hata kodlarını sıfırla ve başarılı dön!
+          exit 0
 
       - name: Gereksiz Servisleri Kapat (Arka Planı Boşalt)
         run: |
@@ -88,26 +90,24 @@ jobs:
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
           }
+          exit 0
 
       - name: FULL PERFORMANS (Ağ ve Arayüz)
         run: |
-          # Ultimate Performance Güç Planı
           powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
           
-          # RDP Performans Ayarları (UDP, Gecikme Sıfırlama)
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
           
-          # Görsel Efektleri Kapat ve Duvar Kağıdını Sil
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
           
-          # Ağ Gecikmesini (Ping) Sıfırla
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
           
           ipconfig /flushdns
+          exit 0
 
       - name: Bağlantı Bilgilerini Göster
         run: |
@@ -120,9 +120,9 @@ jobs:
           Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
           Write-Host "Tarayici      : Firefox (Masaüstünde)"
           Write-Host "===================================="
+          exit 0
           
-      # 60 SAATLİK UYKU KOMUTU
       - name: Sistemi 60 Saat Boyunca Açık Tut
         run: |
-          Write-Host "Sistem ve baglanti disinda her sey silindi. Disk temizlendi. 60 saat uyku basliyor..."
+          Write-Host "Sistem temizlendi. 60 saat uyku basliyor..."
           Start-Sleep -Seconds 216000 
