@@ -245,6 +245,7 @@ jobs:
           foreach ($rp in $regPaths) {
               if (Test-Path $rp) { try { Remove-Item -Path $rp -Recurse -Force -ErrorAction SilentlyContinue } catch {} }
           }
+
           $uninstallPaths = @(
               "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
               "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
@@ -450,47 +451,20 @@ jobs:
           Start-Sleep 8
           exit 0
 
-      - name: Install Real Chrome MSI
+      - name: Install Chrome via Winget
         run: |
           $ErrorActionPreference = 'Continue'
-          Start-Process msiexec.exe -ArgumentList "/unregister" -Wait
-          Start-Process msiexec.exe -ArgumentList "/regserver" -Wait
-          try { Set-Service -Name msiserver -StartupType Automatic } catch {}
-          try { Start-Service -Name msiserver } catch {}
-          $installerPath = "C:\Windows\Installer"
-          takeown /f $installerPath /r /d y 2>$null
-          icacls $installerPath /grant "SYSTEM:(OI)(CI)F" /t 2>$null
-          $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer"
-          if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
-          Set-ItemProperty -Path $regPath -Name "DisableMSI" -Value 0 -Type DWord -Force
-          $ghostKeys = @(
-            "HKLM:\SOFTWARE\Google\Chrome", "HKLM:\SOFTWARE\WOW6432Node\Google\Chrome",
-            "HKLM:\SOFTWARE\Google\Update", "HKLM:\SOFTWARE\WOW6432Node\Google\Update",
-            "HKCU:\SOFTWARE\Google\Chrome", "HKCU:\SOFTWARE\Google\Update",
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome",
-            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome"
-          )
-          foreach ($key in $ghostKeys) {
-            if (Test-Path $key) { Remove-Item -Path $key -Recurse -Force -ErrorAction SilentlyContinue }
-          }
-          Remove-Item "$env:ProgramFiles\Google" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item "${env:ProgramFiles(x86)}\Google" -Recurse -Force -ErrorAction SilentlyContinue
-          $url = "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
-          $msiPath = "$env:TEMP\chrome_enterprise.msi"
-          try {
-            Invoke-WebRequest -Uri $url -OutFile $msiPath -UseBasicParsing -ErrorAction Stop
-            if (-not (Test-Path $msiPath) -or ((Get-Item $msiPath).Length -lt 50MB)) {
-              throw "MSI file missing or too small."
-            }
-          } catch {
-            exit 1
-          }
-          $logPath = "C:\chrome_install.log"
-          $p = Start-Process msiexec.exe -ArgumentList "/i", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$logPath`"" -Wait -PassThru
-          if (Test-Path "$env:ProgramFiles\Google\Chrome\Application\chrome.exe") {
-            Write-Host "Chrome installed." -ForegroundColor Green
+          Write-Host "Attempting to install Google Chrome via winget..." -ForegroundColor Yellow
+          
+          winget install --id Google.Chrome --exact --silent --accept-package-agreements --accept-source-agreements --force
+          
+          Start-Sleep 10
+          
+          $chromeExe = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
+          if (Test-Path $chromeExe) {
+            Write-Host "Chrome installed successfully via winget at: $chromeExe" -ForegroundColor Green
           } else {
-            Write-Host "Failed: $($p.ExitCode). Log: $logPath" -ForegroundColor Red
+            Write-Host "Winget installation failed. Chrome executable not found." -ForegroundColor Red
           }
           exit 0
 
