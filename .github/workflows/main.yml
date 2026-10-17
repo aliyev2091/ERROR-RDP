@@ -11,10 +11,10 @@ jobs:
     steps:
       - name: Show Complete System Information
         run: |
-          Write-Host "`n==================== SYSTEM INFORMATION ====================" -ForegroundColor Cyan
+          Write-Host "==================== SYSTEM INFORMATION ====================" -ForegroundColor Cyan
 
           $os = Get-CimInstance Win32_OperatingSystem
-          Write-Host "`n--- OPERATING SYSTEM ---" -ForegroundColor Yellow
+          Write-Host "--- OPERATING SYSTEM ---" -ForegroundColor Yellow
           Write-Host "OS Name         : $($os.Caption)"
           Write-Host "Version         : $($os.Version)"
           Write-Host "Build           : $($os.BuildNumber)"
@@ -23,7 +23,7 @@ jobs:
           Write-Host "Last Boot       : $($os.LastBootUpTime)"
 
           $cpu = Get-CimInstance Win32_Processor
-          Write-Host "`n--- PROCESSOR ---" -ForegroundColor Yellow
+          Write-Host "--- PROCESSOR ---" -ForegroundColor Yellow
           Write-Host "Name              : $($cpu.Name)"
           Write-Host "Manufacturer      : $($cpu.Manufacturer)"
           Write-Host "Cores             : $($cpu.NumberOfCores)"
@@ -34,7 +34,7 @@ jobs:
           Write-Host "L2 Cache (KB)     : $($cpu.L2CacheSize)"
           Write-Host "L3 Cache (KB)     : $($cpu.L3CacheSize)"
 
-          Write-Host "`n--- MEMORY ---" -ForegroundColor Yellow
+          Write-Host "--- MEMORY ---" -ForegroundColor Yellow
           $totalRam = [math]::Round($os.TotalVisibleMemorySize / 1MB, 2)
           $freeRam  = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
           Write-Host "Total RAM      : $totalRam GB"
@@ -47,7 +47,7 @@ jobs:
               $i++
           }
 
-          Write-Host "`n--- STORAGE (PHYSICAL) ---" -ForegroundColor Yellow
+          Write-Host "--- STORAGE (PHYSICAL) ---" -ForegroundColor Yellow
           try {
               $physicalDisks = Get-PhysicalDisk -ErrorAction Stop
               foreach ($pd in $physicalDisks) {
@@ -69,7 +69,7 @@ jobs:
               Write-Host "Physical disk info unavailable: $_" -ForegroundColor Yellow
           }
 
-          Write-Host "`n--- STORAGE (LOGICAL DRIVES) ---" -ForegroundColor Yellow
+          Write-Host "--- STORAGE (LOGICAL DRIVES) ---" -ForegroundColor Yellow
           $logicalDisks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3"
           foreach ($ld in $logicalDisks) {
               $totalGB = [math]::Round($ld.Size / 1GB, 2)
@@ -78,7 +78,7 @@ jobs:
               Write-Host "Drive $($ld.DeviceID)       : $totalGB GB Total | $usedGB GB Used | $freeGB GB Free"
           }
 
-          Write-Host "`n--- GRAPHICS ---" -ForegroundColor Yellow
+          Write-Host "--- GRAPHICS ---" -ForegroundColor Yellow
           $gpus = Get-CimInstance Win32_VideoController
           foreach ($gpu in $gpus) {
               $vram = "N/A"
@@ -89,7 +89,7 @@ jobs:
               Write-Host "  Resolution   : $($gpu.CurrentHorizontalResolution)x$($gpu.CurrentVerticalResolution)"
           }
 
-          Write-Host "`n--- MOTHERBOARD & BIOS ---" -ForegroundColor Yellow
+          Write-Host "--- MOTHERBOARD & BIOS ---" -ForegroundColor Yellow
           $mb   = Get-CimInstance Win32_BaseBoard
           $bios = Get-CimInstance Win32_BIOS
           $cs   = Get-CimInstance Win32_ComputerSystem
@@ -99,7 +99,7 @@ jobs:
           Write-Host "BIOS           : $($bios.Manufacturer) $($bios.SMBIOSBIOSVersion)"
           Write-Host "Serial         : $($bios.SerialNumber)"
 
-          Write-Host "`n--- NETWORK ---" -ForegroundColor Yellow
+          Write-Host "--- NETWORK ---" -ForegroundColor Yellow
           $adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
           foreach ($ad in $adapters) {
               Write-Host "Adapter        : $($ad.Name) | $($ad.InterfaceDescription)"
@@ -112,10 +112,9 @@ jobs:
           }
 
           $uptime = (Get-Date) - $os.LastBootUpTime
-          Write-Host "`n--- UPTIME ---" -ForegroundColor Yellow
+          Write-Host "--- UPTIME ---" -ForegroundColor Yellow
           Write-Host "Uptime         : $($uptime.Days)d $($uptime.Hours)h $($uptime.Minutes)m"
-
-          Write-Host "`n============================================================`n" -ForegroundColor Cyan
+          Write-Host "============================================================" -ForegroundColor Cyan
 
       - name: Install Tailscale
         run: |
@@ -170,7 +169,6 @@ jobs:
       - name: Aggressive Safe Cleanup
         run: |
           $ErrorActionPreference = 'SilentlyContinue'
-          Write-Host "`n========== AGGRESSIVE SAFE CLEANUP STARTED ==========" -ForegroundColor Yellow
 
           $safeToRemove = @(
             "Microsoft.BingWeather","Microsoft.BingNews","Microsoft.BingSearch","Microsoft.BingFinance",
@@ -199,7 +197,6 @@ jobs:
               try { Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $app } | Remove-AppxProvisionedPackage -Online } catch {}
           }
 
-          Write-Host "Removing Edge and OneDrive..." -ForegroundColor Yellow
           Get-ChildItem "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\*\Installer\setup.exe", "$env:ProgramFiles\Microsoft\Edge\Application\*\Installer\setup.exe" -ErrorAction SilentlyContinue | ForEach-Object {
               Start-Process $_.FullName -ArgumentList "--uninstall","--system-level","--force-uninstall" -Wait
           }
@@ -223,7 +220,6 @@ jobs:
               }
           }
 
-          Write-Host "Removing dev tools..." -ForegroundColor Yellow
           $devTools = @(
             "C:\Program Files\Microsoft Visual Studio","C:\Program Files (x86)\Microsoft Visual Studio",
             "C:\Program Files\Android","C:\Program Files\Java","C:\Program Files\Eclipse Adoptium",
@@ -251,6 +247,46 @@ jobs:
             "C:\Program Files\Microsoft\EdgeUpdate","C:\Program Files (x86)\Microsoft\EdgeUpdate"
           )
           foreach ($dt in $devTools) { if (Test-Path $dt) { FastNuke $dt } }
+
+          $regPaths = @(
+            "HKLM:\SOFTWARE\Google\Chrome",
+            "HKLM:\SOFTWARE\WOW6432Node\Google\Chrome",
+            "HKLM:\SOFTWARE\Google\Update",
+            "HKLM:\SOFTWARE\WOW6432Node\Google\Update",
+            "HKCU:\SOFTWARE\Google\Chrome",
+            "HKCU:\SOFTWARE\Google\Update",
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome",
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge",
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft EdgeUpdate",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft EdgeUpdate",
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Mozilla Firefox",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Mozilla Firefox",
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft OneDrive",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft OneDrive",
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft OneDrive"
+          )
+          foreach ($rp in $regPaths) {
+              if (Test-Path $rp) {
+                  try { Remove-Item -Path $rp -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+              }
+          }
+
+          $uninstallKeys = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue
+          foreach ($key in $uninstallKeys) {
+              $displayName = (Get-ItemProperty -Path $key.PSPath -Name DisplayName -ErrorAction SilentlyContinue).DisplayName
+              if ($displayName -match "Visual Studio|Android|Java JDK|Eclipse|Miniconda|Anaconda|Node.js|Docker|SQL Server|PostgreSQL|MongoDB|Go Programming|Rust|Firefox|Chrome|Edge") {
+                  try { Remove-Item -Path $key.PSPath -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+              }
+          }
+          $uninstallKeys32 = Get-ChildItem "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue
+          foreach ($key in $uninstallKeys32) {
+              $displayName = (Get-ItemProperty -Path $key.PSPath -Name DisplayName -ErrorAction SilentlyContinue).DisplayName
+              if ($displayName -match "Visual Studio|Android|Java JDK|Eclipse|Miniconda|Anaconda|Node.js|Docker|SQL Server|PostgreSQL|MongoDB|Go Programming|Rust|Firefox|Chrome|Edge") {
+                  try { Remove-Item -Path $key.PSPath -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+              }
+          }
 
           $servicesToDisable = @(
             "DiagTrack","dmwappushservice","SysMain","WSearch",
@@ -385,8 +421,6 @@ jobs:
           Optimize-Volume -DriveLetter C -ReTrim -ErrorAction SilentlyContinue 2>$null | Out-Null
           $global:LASTEXITCODE = 0
 
-          Write-Host "========== AGGRESSIVE SAFE CLEANUP COMPLETED ==========`n" -ForegroundColor Green
-
       - name: Repair Services After Cleanup
         run: |
           foreach ($svc in @(
@@ -411,14 +445,11 @@ jobs:
           $tsIP = $null; $r = 0
           while (-not $tsIP -and $r -lt 20) { $tsIP = & $tsExe ip -4 2>$null; if (-not $tsIP) { Start-Sleep 3 }; $r++ }
           if (-not $tsIP) { Write-Error "Tailscale could not be brought back"; exit 1 }
-          Write-Host "Tailscale recovered: $tsIP" -ForegroundColor Green
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
           exit 0
 
       - name: Memory Optimization
         run: |
-          Write-Host "`n========== MEMORY OPTIMIZATION ==========" -ForegroundColor Cyan
-
           foreach ($svc in @("WinDefend","WdNisSvc","Sense","MsSense","SecurityHealthService","wscsvc","MpDefenderCoreService","SgrmBroker","WdFilter","WdNisDrv","WdBoot")) {
               sc.exe stop $svc 2>$null | Out-Null
               sc.exe config $svc start= disabled 2>$null | Out-Null
@@ -434,7 +465,6 @@ jobs:
               $global:LASTEXITCODE = 0
           }
 
-          Write-Host "Trimming working sets..." -ForegroundColor Yellow
           $cs = 'using System;using System.Runtime.InteropServices;public class M{[DllImport("psapi.dll")]public static extern bool EmptyWorkingSet(IntPtr h);[DllImport("kernel32.dll")]public static extern IntPtr OpenProcess(int a,bool i,int p);[DllImport("kernel32.dll")]public static extern bool CloseHandle(IntPtr h);}'
           try {
               Add-Type -TypeDefinition $cs -ErrorAction Stop
@@ -449,10 +479,7 @@ jobs:
                       }
                   } catch {}
               }
-              Write-Host "Trimmed $trimmed processes" -ForegroundColor Green
-          } catch {
-              Write-Host "Working set trim skipped: $_" -ForegroundColor Yellow
-          }
+          } catch {}
 
           [System.GC]::Collect()
           [System.GC]::WaitForPendingFinalizers()
@@ -460,7 +487,6 @@ jobs:
 
           Start-Sleep 8
 
-          Write-Host "`n========== DISK & MEMORY SUMMARY ==========" -ForegroundColor Cyan
           $disk = Get-PSDrive C
           $freeGB = [math]::Round($disk.Free / 1GB, 2)
           $usedGB = [math]::Round($disk.Used / 1GB, 2)
@@ -470,100 +496,39 @@ jobs:
           $ramFree = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
           $ramUsed = [math]::Round($ramTotal - $ramFree, 2)
           Write-Host "RAM Total: $ramTotal GB | Free: $ramFree GB | Used: $ramUsed GB"
-          Write-Host "===========================================`n" -ForegroundColor Cyan
           exit 0
 
-      - name: Install Chrome (Post-Cleanup)
+      - name: Install Real Chrome MSI
         run: |
           $ErrorActionPreference = 'Continue'
+          
+          try { Set-Service -Name msiserver -StartupType Manual -ErrorAction SilentlyContinue } catch {}
+          try { Start-Service -Name msiserver -ErrorAction SilentlyContinue } catch {}
+          Start-Sleep 2
 
-          $existing = @(
-            "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
-            "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
-            "C:\Chrome\chrome-win64\chrome.exe"
-          )
-          foreach ($p in $existing) {
-            if (Test-Path $p) {
-              Write-Host "Chrome already present: $p" -ForegroundColor Green
-              exit 0
-            }
-          }
-
-          Write-Host "Trying winget first..." -ForegroundColor Yellow
-          try {
-            winget install --id Google.Chrome --silent --force --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
-          } catch {}
-          Start-Sleep 10
-
-          $chromeExe = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
-          if (Test-Path $chromeExe) {
-            Write-Host "Chrome installed via winget: $chromeExe" -ForegroundColor Green
+          $chromeExe64 = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
+          if (Test-Path $chromeExe64) {
             exit 0
           }
 
-          Write-Host "winget failed. Using portable Chrome for Testing..." -ForegroundColor Yellow
-
-          $url = $null
+          $url = "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
+          $out = "$env:TEMP\chrome_enterprise.msi"
+          
           try {
-            $json = Invoke-RestMethod -Uri "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json" -UseBasicParsing -ErrorAction Stop
-            $url = ($json.channels.Stable.downloads.chrome | Where-Object { $_.platform -eq "win64" }).url
-          } catch {
-            Write-Host "JSON lookup failed, using fallback version..." -ForegroundColor Yellow
-          }
-
-          if (-not $url) {
-            $url = "https://storage.googleapis.com/chrome-for-testing-public/131.0.6778.204/win64/chrome-win64.zip"
-          }
-
-          Write-Host "Downloading: $url" -ForegroundColor Yellow
-          $zipPath = "$env:TEMP\chrome-portable.zip"
-          $extractPath = "C:\Chrome"
-
-          try {
-            Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
-            if (-not (Test-Path $zipPath) -or ((Get-Item $zipPath).Length -lt 50MB)) {
-              throw "Downloaded file too small or missing"
+            Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing -ErrorAction Stop
+            if (-not (Test-Path $out) -or ((Get-Item $out).Length -lt 50MB)) {
+              throw "Downloaded MSI is too small or missing."
             }
-            Write-Host "Extracting to $extractPath ..." -ForegroundColor Yellow
-            Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-            Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
           } catch {
-            Write-Host "Portable download/extract failed: $_" -ForegroundColor Red
-            exit 0
+            Write-Host "Download failed: $_" -ForegroundColor Red
+            exit 1
           }
 
-          $portableExe = "$extractPath\chrome-win64\chrome.exe"
-          if (Test-Path $portableExe) {
-            Write-Host "Portable Chrome ready: $portableExe" -ForegroundColor Green
-
-            $WshShell = New-Object -ComObject WScript.Shell
-            try {
-              $Shortcut = $WshShell.CreateShortcut("$env:PUBLIC\Desktop\Google Chrome.lnk")
-              $Shortcut.TargetPath = $portableExe
-              $Shortcut.WorkingDirectory = "$extractPath\chrome-win64"
-              $Shortcut.Save()
-              Write-Host "Desktop shortcut created." -ForegroundColor Green
-            } catch {}
-
-            try {
-              $startMenuPath = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Google Chrome.lnk"
-              $Shortcut2 = $WshShell.CreateShortcut($startMenuPath)
-              $Shortcut2.TargetPath = $portableExe
-              $Shortcut2.WorkingDirectory = "$extractPath\chrome-win64"
-              $Shortcut2.Save()
-              Write-Host "Start menu shortcut created." -ForegroundColor Green
-            } catch {}
-
-            try {
-              $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-              if ($machinePath -notlike "*$extractPath\chrome-win64*") {
-                [Environment]::SetEnvironmentVariable("Path", "$machinePath;$extractPath\chrome-win64", "Machine")
-              }
-            } catch {}
-
-          } else {
-            Write-Host "Portable extraction did not produce chrome.exe" -ForegroundColor Red
-          }
+          $p = Start-Process msiexec.exe -ArgumentList "/i", "`"$out`"", "/qn", "/norestart" -Wait -PassThru
+          Write-Host "MSI exit code: $($p.ExitCode)"
+          Remove-Item $out -Force -ErrorAction SilentlyContinue
+          
+          Start-Sleep 5
           exit 0
 
       - name: Verify RDP Accessibility
@@ -571,20 +536,16 @@ jobs:
           $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
           $tsIP = & $tsExe ip -4
           if (-not $tsIP) { Write-Error "Tailscale IP missing"; exit 1 }
-          Write-Host "Tailscale IP: $tsIP"
           $r = Test-NetConnection -ComputerName $tsIP -Port 3389
           if (-not $r.TcpTestSucceeded) { Write-Error "RDP port unreachable"; exit 1 }
-          Write-Host "TCP connectivity successful!"
 
       - name: Maintain Connection
         run: |
           $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
           $tsIP = & $tsExe ip -4
-          Write-Host "`n=== RDP ACCESS ==="
           Write-Host "Address: $tsIP"
           Write-Host "Username: ERROR-4004"
           Write-Host "Password: Password!?"
-          Write-Host "==================`n"
           while ($true) {
               Write-Host "[$(Get-Date)] RDP Active"
               Start-Sleep -Seconds 300
