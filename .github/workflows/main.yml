@@ -129,18 +129,14 @@ jobs:
           $r = 0; while (-not (Test-Path $tsExe) -and $r -lt 30) { Start-Sleep 2; $r++ }
           if (-not (Test-Path $tsExe)) { Write-Error "Tailscale install failed"; exit 1 }
           Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
-          New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control' -Name 'ServicesPipeTimeout' -PropertyType DWord -Value 180000 -Force -ErrorAction SilentlyContinue
-          New-ItemProperty -Path 'HKLM:\Software\Tailscale IPN' -Name UnattendedMode -PropertyType String -Value always -Force -ErrorAction SilentlyContinue
 
       - name: Establish Tailscale Connection
         run: |
           $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
-          & $tsExe set --unattended=true
           & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
           $tsIP = $null; $r = 0
           while (-not $tsIP -and $r -lt 10) { $tsIP = & $tsExe ip -4; Start-Sleep 5; $r++ }
           if (-not $tsIP) { Write-Error "No Tailscale IP"; exit 1 }
-          Set-Service -Name Tailscale -StartupType Automatic -ErrorAction SilentlyContinue
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
       - name: Configure Core RDP Settings
@@ -472,37 +468,14 @@ jobs:
           $r = Test-NetConnection -ComputerName $tsIP -Port 3389
           if (-not $r.TcpTestSucceeded) { Write-Error "RDP port unreachable"; exit 1 }
 
-      - name: Maintain Connection (Self-Healing & Unattended)
+      - name: Maintain Connection
         run: |
           $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
-          $authKey = "${{ secrets.TAILSCALE_AUTH_KEY }}"
-          
-          Set-Service -Name Tailscale -StartupType Automatic -ErrorAction SilentlyContinue
-          New-ItemProperty -Path 'HKLM:\Software\Tailscale IPN' -Name UnattendedMode -PropertyType String -Value always -Force -ErrorAction SilentlyContinue
-          
+          $tsIP = & $tsExe ip -4
+          Write-Host "Address: $tsIP"
+          Write-Host "Username: ERROR-4004"
+          Write-Host "Password: Password!?"
           while ($true) {
-              $tsIP = & $tsExe ip -4 2>$null
-              if (-not $tsIP) {
-                  Write-Host "[$(Get-Date)] Tailscale baglantisi yok, yeniden baglaniliyor..."
-                  Restart-Service -Name Tailscale -Force -ErrorAction SilentlyContinue
-                  Start-Sleep -Seconds 10
-                  & $tsExe set --unattended=true
-                  & $tsExe up --authkey=$authKey --hostname=gh-runner-$env:GITHUB_RUN_ID --reset 2>$null
-                  Start-Sleep -Seconds 15
-                  $tsIP = & $tsExe ip -4 2>$null
-                  if (-not $tsIP) {
-                      Write-Host "[$(Get-Date)] Yeniden baglanma basarisiz, 60 saniye sonra tekrar denenecek."
-                  } else {
-                      Write-Host "[$(Get-Date)] Tailscale yeniden baglandi: $tsIP"
-                      Write-Host "Address : $tsIP"
-                      Write-Host "Username: ERROR-4004"
-                      Write-Host "Password: Password!?"
-                  }
-              } else {
-                  Write-Host "[$(Get-Date)] RDP Aktif | Tailscale IP: $tsIP"
-                  Write-Host "Address : $tsIP"
-                  Write-Host "Username: ERROR-4004"
-                  Write-Host "Password: Password!?"
-              }
+              Write-Host "[$(Get-Date)] RDP Active"
               Start-Sleep -Seconds 300
           }
