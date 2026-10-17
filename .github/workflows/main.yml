@@ -129,15 +129,18 @@ jobs:
           $r = 0; while (-not (Test-Path $tsExe) -and $r -lt 30) { Start-Sleep 2; $r++ }
           if (-not (Test-Path $tsExe)) { Write-Error "Tailscale install failed"; exit 1 }
           Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
+          New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control' -Name 'ServicesPipeTimeout' -PropertyType DWord -Value 180000 -Force -ErrorAction SilentlyContinue
           New-ItemProperty -Path 'HKLM:\Software\Tailscale IPN' -Name UnattendedMode -PropertyType String -Value always -Force -ErrorAction SilentlyContinue
 
       - name: Establish Tailscale Connection
         run: |
           $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
-          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID --unattended
+          & $tsExe set --unattended=true
+          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
           $tsIP = $null; $r = 0
           while (-not $tsIP -and $r -lt 10) { $tsIP = & $tsExe ip -4; Start-Sleep 5; $r++ }
           if (-not $tsIP) { Write-Error "No Tailscale IP"; exit 1 }
+          Set-Service -Name Tailscale -StartupType Automatic -ErrorAction SilentlyContinue
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
       - name: Configure Core RDP Settings
@@ -474,9 +477,7 @@ jobs:
           $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
           $authKey = "${{ secrets.TAILSCALE_AUTH_KEY }}"
           
-          # Tailscale hizmetinin otomatik baslatildigindan emin ol
           Set-Service -Name Tailscale -StartupType Automatic -ErrorAction SilentlyContinue
-          # Yeniden baslatma sonrasi Tailscale'in otomatik devreye girmesi icin kayit defteri ayari
           New-ItemProperty -Path 'HKLM:\Software\Tailscale IPN' -Name UnattendedMode -PropertyType String -Value always -Force -ErrorAction SilentlyContinue
           
           while ($true) {
@@ -485,7 +486,8 @@ jobs:
                   Write-Host "[$(Get-Date)] Tailscale baglantisi yok, yeniden baglaniliyor..."
                   Restart-Service -Name Tailscale -Force -ErrorAction SilentlyContinue
                   Start-Sleep -Seconds 10
-                  & $tsExe up --authkey=$authKey --hostname=gh-runner-$env:GITHUB_RUN_ID --unattended --reset 2>$null
+                  & $tsExe set --unattended=true
+                  & $tsExe up --authkey=$authKey --hostname=gh-runner-$env:GITHUB_RUN_ID --reset 2>$null
                   Start-Sleep -Seconds 15
                   $tsIP = & $tsExe ip -4 2>$null
                   if (-not $tsIP) {
