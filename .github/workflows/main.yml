@@ -1,13 +1,14 @@
 name: ERROR-4004
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Manuel başlatma
 
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 3600 # İsteğin üzerine 60 saat (3600 dakika) yapıldı (GitHub bunu 360'a zorla çekecek)
+    
     steps:
-      # HATA ÇÖZÜMÜ: @v2 yerine @v3 kullanıyoruz (Windows desteği için)
       - name: Tailscale'i Başlat
         uses: tailscale/github-action@v3
         with:
@@ -31,13 +32,9 @@ jobs:
 
       - name: RDP Performans Ayarlarını Uygula (Full Performans)
         run: |
-          # UDP/TCP hibrit taşıma (Gecikmeyi düşürür)
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
-          # Etkileşim gecikmesini sıfırla
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
-          # Çerçeve hızını optimize et
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
-          # Sistem yanıt verme önceliğini maksimuma çıkar
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' -Name "SystemResponsiveness" -Value 0
 
       - name: Bağlantı Bilgilerini Göster
@@ -50,3 +47,9 @@ jobs:
           Write-Host "Kullanici Adi : ERROR-4004"
           Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
           Write-Host "===================================="
+          
+      # 60 SAATLİK (216.000 SANİYE) UYKU KOMUTU
+      - name: Sistemi 60 Saat Boyunca Açık Tut (Gönlün Olsun Knk)
+        run: |
+          Write-Host "Sistem açıldı. Kod 60 saat uyuyacak ama GitHub 6. saatte kapatacak!"
+          Start-Sleep -Seconds 216000 
