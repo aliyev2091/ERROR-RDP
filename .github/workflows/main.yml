@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 3600 # İsteğin üzerine 60 saat (3600 dakika) yapıldı (GitHub bunu 360'a zorla çekecek)
+    timeout-minutes: 3600 # 60 saat
     
     steps:
       - name: Tailscale'i Başlat
@@ -14,13 +14,11 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
-      - name: RDP'yi Etkinleştir ve Güvenlik Duvarını Yapılandır
+      - name: Kullanıcı Oluştur ve RDP'yi Etkinleştir
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-
-      - name: ERROR-4004 Kullanıcısını Oluştur ve Yönetici Yap
-        run: |
+          
           $Password = ConvertTo-SecureString -AsPlainText "${{ secrets.ERROR_4004_PASSWORD }}" -Force
           if (-not (Get-LocalUser -Name "ERROR-4004" -ErrorAction SilentlyContinue)) {
             New-LocalUser -Name "ERROR-4004" -Password $Password -PasswordNeverExpires -AccountNeverExpires
@@ -30,26 +28,89 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004" -ErrorAction SilentlyContinue
 
-      - name: RDP Performans Ayarlarını Uygula (Full Performans)
+      - name: Firefox'u Sessizce İndir ve Kur
         run: |
+          Write-Host "Firefox indiriliyor ve kuruluyor..."
+          $firefoxUrl = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US"
+          Invoke-WebRequest -Uri $firefoxUrl -OutFile "$env:TEMP\firefox_installer.exe"
+          # /S parametresi sessiz kurulum yapar
+          Start-Process -FilePath "$env:TEMP\firefox_installer.exe" -ArgumentList "/S" -Wait
+
+      - name: BÜYÜK TEMİZLİK (Masaüstü, Belgeler, Windows Çöpleri)
+        run: |
+          # 1. Masaüstündeki Her Şeyi Sil (Kullanıcı ve Public)
+          Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # 2. İndirilenler, Belgeler, Resimler, Videolar, Müzikleri Sıfırla
+          $folders = @("Downloads", "Documents", "Pictures", "Videos", "Music")
+          foreach ($folder in $folders) {
+            Remove-Item -Path "C:\Users\runneradmin\$folder\*" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -Path "C:\Users\Public\$folder\*" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+          # 3. Windows Mağaza Uygulamalarını (Appx) Söküp At
+          Get-AppxPackage -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue
+          
+          # 4. Hazırda Bekletmeyi Kapat (Diskte GB'larca yer açar)
+          powercfg -h off
+          
+          # 5. Sistem Geri Yükleme ve Gölge Kopyaları Sil
+          Disable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
+          vssadmin delete shadows /all /quiet
+          
+          # 6. Tüm Geçici (Temp) ve Önbellek Dosyalarını Sil
+          Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Prefetch\*" -Recurse -Force -ErrorAction SilentlyContinue
+
+          # 7. Defender'ı Kapat
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+          Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
+
+      - name: Gereksiz Servisleri Kapat
+        run: |
+          $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc")
+          foreach ($svc in $services) {
+            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+          }
+
+      - name: FULL PERFORMANS (Ağ ve Arayüz)
+        run: |
+          # Ultimate Performance Güç Planı
+          powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+          
+          # RDP Performans Ayarları (UDP, Gecikme Sıfırlama)
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
-          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' -Name "SystemResponsiveness" -Value 0
+          
+          # Görsel Efektleri Kapat ve Duvar Kağıdını Sil
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
+          
+          # Ağ Gecikmesini (Ping) Sıfırla
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
+          
+          ipconfig /flushdns
 
       - name: Bağlantı Bilgilerini Göster
         run: |
           Write-Host "===================================="
-          Write-Host "        ERROR-4004 RDP BILGILERI    "
+          Write-Host "   ERROR-4004 ÇIPLAK SİSTEM MODU    "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
           Write-Host "Kullanici Adi : ERROR-4004"
           Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
+          Write-Host "Tarayici      : Firefox (Masaüstünde)"
           Write-Host "===================================="
           
-      # 60 SAATLİK (216.000 SANİYE) UYKU KOMUTU
-      - name: Sistemi 60 Saat Boyunca Açık Tut (Gönlün Olsun Knk)
+      # 60 SAATLİK UYKU KOMUTU
+      - name: Sistemi 60 Saat Boyunca Açık Tut
         run: |
-          Write-Host "Sistem açıldı. Kod 60 saat uyuyacak ama GitHub 6. saatte kapatacak!"
+          Write-Host "Sistemde sadece baglanti, sistem, cop kutusu ve Firefox kaldi. 60 saat uyku basliyor..."
           Start-Sleep -Seconds 216000 
