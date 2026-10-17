@@ -451,59 +451,31 @@ jobs:
           Start-Sleep 8
           exit 0
 
-      - name: Install Chrome via Winget and MSI Fallback
+      - name: Install Firefox
         run: |
           $ErrorActionPreference = 'Continue'
-          
-          Write-Host "Fixing winget sources..." -ForegroundColor Yellow
-          winget source remove msstore --force 2>$null
-          winget source reset --force 2>$null
-          winget source update 2>$null
-          
-          Write-Host "Attempting to install Google Chrome via winget..." -ForegroundColor Yellow
-          winget install --id Google.Chrome --exact --silent --accept-package-agreements --accept-source-agreements --force --source winget
-          
-          Start-Sleep 5
-          
-          $chromeExe = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
-          if (Test-Path $chromeExe) {
-            Write-Host "Chrome installed successfully via winget at: $chromeExe" -ForegroundColor Green
-            exit 0
-          }
-          
-          Write-Host "Winget failed. Attempting direct MSI download and install..." -ForegroundColor Yellow
-          
-          Start-Process msiexec.exe -ArgumentList "/unregister" -Wait
-          Start-Process msiexec.exe -ArgumentList "/regserver" -Wait
-          
-          $installerPath = "C:\Windows\Installer"
-          takeown /f $installerPath /r /d y 2>$null
-          icacls $installerPath /grant "SYSTEM:(OI)(CI)F" /t 2>$null
-          
-          try { Set-Service -Name msiserver -StartupType Automatic -ErrorAction SilentlyContinue } catch {}
-          try { Start-Service -Name msiserver -ErrorAction SilentlyContinue } catch {}
-          
-          $url = "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
-          $msiPath = "$env:TEMP\chrome_enterprise.msi"
+          Write-Host "Downloading Firefox..." -ForegroundColor Yellow
+          $url = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US"
+          $installerPath = "$env:TEMP\firefox_installer.exe"
           
           try {
-            Invoke-WebRequest -Uri $url -OutFile $msiPath -UseBasicParsing -ErrorAction Stop
-            if (-not (Test-Path $msiPath) -or ((Get-Item $msiPath).Length -lt 50MB)) {
-              throw "MSI file missing or too small."
-            }
+              Invoke-WebRequest -Uri $url -OutFile $installerPath -UseBasicParsing -ErrorAction Stop
           } catch {
-            Write-Host "Download failed: $_" -ForegroundColor Red
-            exit 1
+              Write-Host "Download failed: $_" -ForegroundColor Red
+              exit 1
           }
+
+          Write-Host "Installing Firefox silently..." -ForegroundColor Yellow
+          $p = Start-Process -FilePath $installerPath -ArgumentList "-ms" -Wait -PassThru
+          Write-Host "Firefox installer exit code: $($p.ExitCode)"
           
-          $logPath = "C:\chrome_install.log"
-          $p = Start-Process msiexec.exe -ArgumentList "/i", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$logPath`"" -Wait -PassThru
-          Write-Host "MSI exit code: $($p.ExitCode)"
-          
-          if (Test-Path $chromeExe) {
-            Write-Host "Chrome installed successfully via MSI at: $chromeExe" -ForegroundColor Green
+          Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
+
+          $firefoxExe = "$env:ProgramFiles\Mozilla Firefox\firefox.exe"
+          if (Test-Path $firefoxExe) {
+              Write-Host "Firefox installed successfully at: $firefoxExe" -ForegroundColor Green
           } else {
-            Write-Host "Chrome installation failed after all attempts. Check log: $logPath" -ForegroundColor Red
+              Write-Host "Firefox installation failed." -ForegroundColor Red
           }
           exit 0
 
