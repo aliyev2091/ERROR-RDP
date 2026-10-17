@@ -247,7 +247,20 @@ jobs:
               }
           }
 
-          $ghostPattern = "Bing|Xbox|OneDrive|Visual Studio|Android|Java|Eclipse|Miniconda|Anaconda|Node.js|Docker|SQL Server|PostgreSQL|MongoDB|Go Programming|Rust|Chrome|Edge"
+          $ghostPattern = "Bing|Xbox|OneDrive|Visual Studio|Android|Java|Eclipse|Miniconda|Anaconda|Node.js|Docker|SQL Server|PostgreSQL|MongoDB|Go Programming|Rust|Chrome|Edge|Python|Unity"
+          
+          $shortcutPaths = @(
+              "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\*",
+              "C:\Users\runneradmin\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\*",
+              "C:\Users\Public\Desktop\*",
+              "C:\Users\runneradmin\Desktop\*"
+          )
+          foreach ($sp in $shortcutPaths) {
+              Get-ChildItem -Path $sp -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $ghostPattern } | Remove-Item -Force -ErrorAction SilentlyContinue
+          }
+
+          Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState\*" -Recurse -Force -ErrorAction SilentlyContinue
+
           $uninstallKeys = @(
             "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
             "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
@@ -258,6 +271,12 @@ jobs:
                   Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
               }
           }
+
+          $appPaths = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\*"
+          Get-ItemProperty -Path $appPaths -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match $ghostPattern } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
+          
+          $appPaths32 = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\*"
+          Get-ItemProperty -Path $appPaths32 -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match $ghostPattern } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
 
           $regPathsToDelete = @(
             "HKLM:\SOFTWARE\Google\Chrome", "HKLM:\SOFTWARE\WOW6432Node\Google\Chrome",
