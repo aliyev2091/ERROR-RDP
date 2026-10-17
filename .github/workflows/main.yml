@@ -455,7 +455,12 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           
-          Write-Host "Attempting to install Google Chrome via winget with source agreements..." -ForegroundColor Yellow
+          Write-Host "Fixing winget sources..." -ForegroundColor Yellow
+          winget source remove msstore --force 2>$null
+          winget source reset --force 2>$null
+          winget source update 2>$null
+          
+          Write-Host "Attempting to install Google Chrome via winget..." -ForegroundColor Yellow
           winget install --id Google.Chrome --exact --silent --accept-package-agreements --accept-source-agreements --force --source winget
           
           Start-Sleep 5
@@ -470,6 +475,11 @@ jobs:
           
           Start-Process msiexec.exe -ArgumentList "/unregister" -Wait
           Start-Process msiexec.exe -ArgumentList "/regserver" -Wait
+          
+          $installerPath = "C:\Windows\Installer"
+          takeown /f $installerPath /r /d y 2>$null
+          icacls $installerPath /grant "SYSTEM:(OI)(CI)F" /t 2>$null
+          
           try { Set-Service -Name msiserver -StartupType Automatic -ErrorAction SilentlyContinue } catch {}
           try { Start-Service -Name msiserver -ErrorAction SilentlyContinue } catch {}
           
@@ -486,13 +496,14 @@ jobs:
             exit 1
           }
           
-          $p = Start-Process msiexec.exe -ArgumentList "/i", "`"$msiPath`"", "/qn", "/norestart" -Wait -PassThru
+          $logPath = "C:\chrome_install.log"
+          $p = Start-Process msiexec.exe -ArgumentList "/i", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$logPath`"" -Wait -PassThru
           Write-Host "MSI exit code: $($p.ExitCode)"
           
           if (Test-Path $chromeExe) {
             Write-Host "Chrome installed successfully via MSI at: $chromeExe" -ForegroundColor Green
           } else {
-            Write-Host "Chrome installation failed after all attempts." -ForegroundColor Red
+            Write-Host "Chrome installation failed after all attempts. Check log: $logPath" -ForegroundColor Red
           }
           exit 0
 
