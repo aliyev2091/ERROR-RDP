@@ -7,11 +7,11 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
+      # HATA ÇÖZÜMÜ: @v2 yerine @v3 kullanıyoruz (Windows desteği için)
       - name: Tailscale'i Başlat
-        uses: tailscale/github-action@v2
+        uses: tailscale/github-action@v3
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-          args: --accept-routes --advertise-exit-node=false
 
       - name: RDP'yi Etkinleştir ve Güvenlik Duvarını Yapılandır
         run: |
@@ -21,7 +21,6 @@ jobs:
       - name: ERROR-4004 Kullanıcısını Oluştur ve Yönetici Yap
         run: |
           $Password = ConvertTo-SecureString -AsPlainText "${{ secrets.ERROR_4004_PASSWORD }}" -Force
-          # Alternatif (koda gömülü - önerilmez): ConvertTo-SecureString -AsPlainText "ERROR-12345" -Force
           if (-not (Get-LocalUser -Name "ERROR-4004" -ErrorAction SilentlyContinue)) {
             New-LocalUser -Name "ERROR-4004" -Password $Password -PasswordNeverExpires -AccountNeverExpires
           } else {
@@ -30,16 +29,22 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004" -ErrorAction SilentlyContinue
 
-      - name: RDP Performans Ayarlarını Uygula
+      - name: RDP Performans Ayarlarını Uygula (Full Performans)
         run: |
+          # UDP/TCP hibrit taşıma (Gecikmeyi düşürür)
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
+          # Etkileşim gecikmesini sıfırla
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
+          # Çerçeve hızını optimize et
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
+          # Sistem yanıt verme önceliğini maksimuma çıkar
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' -Name "SystemResponsiveness" -Value 0
 
       - name: Bağlantı Bilgilerini Göster
         run: |
-          Write-Host "===== ERROR-4004 RDP BILGILERI ====="
+          Write-Host "===================================="
+          Write-Host "        ERROR-4004 RDP BILGILERI    "
+          Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
           Write-Host "Kullanici Adi : ERROR-4004"
