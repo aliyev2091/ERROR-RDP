@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 3600 # 60 saat
+    timeout-minutes: 3600 # 60 saat (Gönlün olsun, GitHub 6 saatte kesecek)
     
     steps:
       - name: Tailscale'i Başlat
@@ -16,9 +16,11 @@ jobs:
 
       - name: Kullanıcı Oluştur ve RDP'yi Etkinleştir
         run: |
+          # RDP Aç
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           
+          # Kullanıcı Oluştur
           $Password = ConvertTo-SecureString -AsPlainText "${{ secrets.ERROR_4004_PASSWORD }}" -Force
           if (-not (Get-LocalUser -Name "ERROR-4004" -ErrorAction SilentlyContinue)) {
             New-LocalUser -Name "ERROR-4004" -Password $Password -PasswordNeverExpires -AccountNeverExpires
@@ -35,41 +37,51 @@ jobs:
           Invoke-WebRequest -Uri $firefoxUrl -OutFile "$env:TEMP\firefox_installer.exe"
           # /S parametresi sessiz kurulum yapar
           Start-Process -FilePath "$env:TEMP\firefox_installer.exe" -ArgumentList "/S" -Wait
+          Write-Host "Firefox kuruldu."
 
       - name: BÜYÜK TEMİZLİK (Masaüstü, Belgeler, Windows Çöpleri)
         run: |
-          # 1. Masaüstündeki Her Şeyi Sil (Kullanıcı ve Public)
+          # 1. Masaüstündeki Her Şeyi Sil
           Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           
-          # 2. İndirilenler, Belgeler, Resimler, Videolar, Müzikleri Sıfırla
+          # 2. İndirilenler, Belgeler, Resimler vb. Sıfırla
           $folders = @("Downloads", "Documents", "Pictures", "Videos", "Music")
           foreach ($folder in $folders) {
             Remove-Item -Path "C:\Users\runneradmin\$folder\*" -Recurse -Force -ErrorAction SilentlyContinue
             Remove-Item -Path "C:\Users\Public\$folder\*" -Recurse -Force -ErrorAction SilentlyContinue
           }
 
-          # 3. Windows Mağaza Uygulamalarını (Appx) Söküp At
+          # 3. Windows Mağaza Uygulamalarını Söküp At
           Get-AppxPackage -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue
           
           # 4. Hazırda Bekletmeyi Kapat (Diskte GB'larca yer açar)
           powercfg -h off
           
           # 5. Sistem Geri Yükleme ve Gölge Kopyaları Sil
-          Disable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
-          vssadmin delete shadows /all /quiet
+          try {
+            Disable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
+            vssadmin delete shadows /all /quiet
+          } catch {
+            Write-Host "Gölge kopya zaten yok veya silinemedi, devam ediliyor..."
+          }
           
-          # 6. Tüm Geçici (Temp) ve Önbellek Dosyalarını Sil
+          # 6. Tüm Geçici Dosyaları Sil
           Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Prefetch\*" -Recurse -Force -ErrorAction SilentlyContinue
 
           # 7. Defender'ı Kapat
-          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-          Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
+          try {
+            Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop
+            Set-MpPreference -DisableIOAVProtection $true -ErrorAction Stop
+            Write-Host "Defender basariyla kapatildi."
+          } catch {
+            Write-Host "Defender modulu bulunamadi veya zaten kapali. Sorun yok, devam ediliyor..."
+          }
 
-      - name: Gereksiz Servisleri Kapat
+      - name: Gereksiz Servisleri Kapat (Arka Planı Boşalt)
         run: |
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc")
           foreach ($svc in $services) {
@@ -112,5 +124,5 @@ jobs:
       # 60 SAATLİK UYKU KOMUTU
       - name: Sistemi 60 Saat Boyunca Açık Tut
         run: |
-          Write-Host "Sistemde sadece baglanti, sistem, cop kutusu ve Firefox kaldi. 60 saat uyku basliyor..."
+          Write-Host "Sistem ve baglanti disinda her sey silindi. Disk temizlendi. 60 saat uyku basliyor..."
           Start-Sleep -Seconds 216000 
