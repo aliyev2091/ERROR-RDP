@@ -451,20 +451,48 @@ jobs:
           Start-Sleep 8
           exit 0
 
-      - name: Install Chrome via Winget
+      - name: Install Chrome via Winget and MSI Fallback
         run: |
           $ErrorActionPreference = 'Continue'
-          Write-Host "Attempting to install Google Chrome via winget..." -ForegroundColor Yellow
           
-          winget install --id Google.Chrome --exact --silent --accept-package-agreements --accept-source-agreements --force
+          Write-Host "Attempting to install Google Chrome via winget with source agreements..." -ForegroundColor Yellow
+          winget install --id Google.Chrome --exact --silent --accept-package-agreements --accept-source-agreements --force --source winget
           
-          Start-Sleep 10
+          Start-Sleep 5
           
           $chromeExe = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
           if (Test-Path $chromeExe) {
             Write-Host "Chrome installed successfully via winget at: $chromeExe" -ForegroundColor Green
+            exit 0
+          }
+          
+          Write-Host "Winget failed. Attempting direct MSI download and install..." -ForegroundColor Yellow
+          
+          Start-Process msiexec.exe -ArgumentList "/unregister" -Wait
+          Start-Process msiexec.exe -ArgumentList "/regserver" -Wait
+          try { Set-Service -Name msiserver -StartupType Automatic -ErrorAction SilentlyContinue } catch {}
+          try { Start-Service -Name msiserver -ErrorAction SilentlyContinue } catch {}
+          
+          $url = "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
+          $msiPath = "$env:TEMP\chrome_enterprise.msi"
+          
+          try {
+            Invoke-WebRequest -Uri $url -OutFile $msiPath -UseBasicParsing -ErrorAction Stop
+            if (-not (Test-Path $msiPath) -or ((Get-Item $msiPath).Length -lt 50MB)) {
+              throw "MSI file missing or too small."
+            }
+          } catch {
+            Write-Host "Download failed: $_" -ForegroundColor Red
+            exit 1
+          }
+          
+          $p = Start-Process msiexec.exe -ArgumentList "/i", "`"$msiPath`"", "/qn", "/norestart" -Wait -PassThru
+          Write-Host "MSI exit code: $($p.ExitCode)"
+          
+          if (Test-Path $chromeExe) {
+            Write-Host "Chrome installed successfully via MSI at: $chromeExe" -ForegroundColor Green
           } else {
-            Write-Host "Winget installation failed. Chrome executable not found." -ForegroundColor Red
+            Write-Host "Chrome installation failed after all attempts." -ForegroundColor Red
           }
           exit 0
 
