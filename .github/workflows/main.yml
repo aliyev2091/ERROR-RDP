@@ -183,6 +183,7 @@ jobs:
           foreach ($app in $safeToRemove) {
               try { Get-AppxPackage -Name $app | Remove-AppxPackage } catch {}
               try { Get-AppxPackage -AllUsers -Name $app | Remove-AppxPackage -AllUsers } catch {}
+              try { Get-AppxPackage -User "ERROR-4004" -Name $app | Remove-AppxPackage } catch {}
               try { Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $app } | Remove-AppxProvisionedPackage -Online } catch {}
           }
 
@@ -256,6 +257,42 @@ jobs:
               Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
           }
 
+          $startMenus = @(
+            "C:\ProgramData\Microsoft\Windows\Start Menu\Programs",
+            "C:\Users\runneradmin\AppData\Roaming\Microsoft\Windows\Start Menu\Programs",
+            "C:\Users\ERROR-4004\AppData\Roaming\Microsoft\Windows\Start Menu\Programs"
+          )
+          $ghostShortcuts = @("*Chrome*.lnk", "*Edge*.lnk", "*OneDrive*.lnk", "*Visual Studio*.lnk", "*Android*.lnk")
+          foreach ($menu in $startMenus) {
+              if (Test-Path $menu) {
+                  foreach ($pattern in $ghostShortcuts) {
+                      Get-ChildItem -Path $menu -Filter $pattern -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+                  }
+              }
+          }
+          
+          $desktopPaths = @("C:\Users\Public\Desktop", "C:\Users\runneradmin\Desktop", "C:\Users\ERROR-4004\Desktop")
+          foreach ($desk in $desktopPaths) {
+              if (Test-Path $desk) {
+                  foreach ($pattern in $ghostShortcuts) {
+                      Get-ChildItem -Path $desk -Filter $pattern -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+                  }
+              }
+          }
+
+          $appxRegKeys = @(
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Deprovisioned"
+          )
+          foreach ($akey in $appxRegKeys) {
+              if (Test-Path $akey) {
+                  Get-ChildItem -Path $akey -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match "Microsoft|Clipchamp" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+              }
+          }
+
+          Get-ChildItem "C:\Users\runneradmin\AppData\Local\Packages" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "Microsoft.Bing|Microsoft.GetHelp|Microsoft.OfficeHub|Microsoft.Todos|Microsoft.PowerAutomate|Microsoft.Photos|Microsoft.ScreenSketch|Microsoft.MSPaint|Microsoft.WindowsCamera|Microsoft.WindowsAlarms|Microsoft.People|Microsoft.SkypeApp|Clipchamp|Microsoft.Xbox|Microsoft.GamingApp|Microsoft.Zune|Microsoft.YourPhone|Microsoft.WindowsMaps|Microsoft.Solitaire|MicrosoftTeams|Microsoft.StickyNotes|Microsoft.Wallet|Microsoft.3DBuilder|Microsoft.MixedReality|Microsoft.Office.Sway|Microsoft.OneConnect|Microsoft.Print3D|Microsoft.NetworkSpeedTest|Microsoft.News|Microsoft.OneDrive" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          
+          Get-ChildItem "C:\Users\ERROR-4004\AppData\Local\Packages" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "Microsoft.Bing|Microsoft.GetHelp|Microsoft.OfficeHub|Microsoft.Todos|Microsoft.PowerAutomate|Microsoft.Photos|Microsoft.ScreenSketch|Microsoft.MSPaint|Microsoft.WindowsCamera|Microsoft.WindowsAlarms|Microsoft.People|Microsoft.SkypeApp|Clipchamp|Microsoft.Xbox|Microsoft.GamingApp|Microsoft.Zune|Microsoft.YourPhone|Microsoft.WindowsMaps|Microsoft.Solitaire|MicrosoftTeams|Microsoft.StickyNotes|Microsoft.Wallet|Microsoft.3DBuilder|Microsoft.MixedReality|Microsoft.Office.Sway|Microsoft.OneConnect|Microsoft.Print3D|Microsoft.NetworkSpeedTest|Microsoft.News|Microsoft.OneDrive" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
           $servicesToDisable = @(
             "DiagTrack","dmwappushservice","SysMain","WSearch",
             "XblAuthManager","XblGameSave","XboxGipSvc","XboxNetApiSvc","WMPNetworkSvc",
@@ -315,7 +352,11 @@ jobs:
             "C:\Windows\Logs\NetSetup","C:\Windows\LiveKernelReports","C:\Windows\Minidump",
             "C:\Windows\Panther","C:\ProgramData\Microsoft\Windows\WER",
             "C:\ProgramData\Microsoft\Windows Defender\Scans","C:\Windows\Downloaded Program Files",
-            "C:\Windows\Installer\$PatchCache$"
+            "C:\Windows\Installer\$PatchCache$",
+            "C:\Users\runneradmin\AppData\Local\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\TempState",
+            "C:\Users\ERROR-4004\AppData\Local\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\TempState",
+            "C:\Users\runneradmin\AppData\Local\Packages\Microsoft.Windows.Search_cw5n1h2txyewy\LocalState",
+            "C:\Users\ERROR-4004\AppData\Local\Packages\Microsoft.Windows.Search_cw5n1h2txyewy\LocalState"
           )
           foreach ($p in $nukeList) { Nuke-Path $p }
 
@@ -329,6 +370,10 @@ jobs:
             "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\WebCache","C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Explorer",
             "C:\Users\runneradmin\AppData\Local\CrashDumps","C:\Users\runneradmin\AppData\Local\Packages\*\LocalCache",
             "C:\Users\runneradmin\AppData\Local\Packages\*\TempState",
+            "C:\Users\ERROR-4004\AppData\Local\Temp","C:\Users\ERROR-4004\AppData\Local\Microsoft\Windows\INetCache",
+            "C:\Users\ERROR-4004\AppData\Local\Microsoft\Windows\WebCache","C:\Users\ERROR-4004\AppData\Local\Microsoft\Windows\Explorer",
+            "C:\Users\ERROR-4004\AppData\Local\CrashDumps","C:\Users\ERROR-4004\AppData\Local\Packages\*\LocalCache",
+            "C:\Users\ERROR-4004\AppData\Local\Packages\*\TempState",
             "C:\Users\Public\Documents","C:\Users\Public\Downloads","C:\Users\Public\Music",
             "C:\Users\Public\Pictures","C:\Users\Public\Videos"
           )
@@ -355,6 +400,9 @@ jobs:
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v "fDenyTSConnections" /t REG_DWORD /d 0 /f >$null 2>&1
           reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v "DisableAntiSpyware" /t REG_DWORD /d 1 /f >$null 2>&1
           reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" /v "DisableRealtimeMonitoring" /t REG_DWORD /d 1 /f >$null 2>&1
+          
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications" /v "GlobalUserDisabled" /t REG_DWORD /d 1 /f >$null 2>&1
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy" /v "LetAppsRunInBackground" /t REG_DWORD /d 2 /f >$null 2>&1
 
           $tasks = @(
             "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
