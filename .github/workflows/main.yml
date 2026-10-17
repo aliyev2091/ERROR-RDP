@@ -55,6 +55,7 @@ jobs:
                       elseif ($pd.BusType -eq 'NVMe') { $mediaType = 'SSD (NVMe)' }
                       elseif ($pd.BusType -eq 'SATA') { $mediaType = 'SSD/HDD (SATA)' }
                       elseif ($pd.BusType -eq 'RAID') { $mediaType = 'Virtual (RAID)' }
+                      elseif ($pd.FriendlyName -match 'Virtual Disk') { $mediaType = 'Virtual (Cloud SSD)' }
                       else { $mediaType = 'Unknown' }
                   }
                   Write-Host "Disk $($pd.DeviceId)         : $($pd.FriendlyName)"
