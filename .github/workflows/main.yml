@@ -18,8 +18,6 @@ jobs:
           Write-Host "[+] Islemci (CPU) : $($cpu.Name)"
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari   : $ram GB"
-          $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object FriendlyName, MediaType, @{Name="SizeGB";Expression={[math]::Round($_.Size/1GB, 2)}}
-          foreach ($disk in $disks) { Write-Host "[+] Disk          : $($disk.FriendlyName) | Tipi: $($disk.MediaType) | Kapasite: $($disk.SizeGB) GB" }
           $cDrive = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
           Write-Host "[+] C: Surucusu   : $([math]::Round($cDrive.FreeSpace/1GB,2)) GB Bos / $([math]::Round($cDrive.Size/1GB,2)) GB Toplam"
           exit 0
@@ -42,13 +40,10 @@ jobs:
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
           exit 0
 
-      # ==========================================
-      # TURBO HIZLANDIRICI: DOSYALARI KİLİTLEYEN SERVİSLERİ DURDUR
-      # ==========================================
       - name: Dosya Kilitlerini Aç (Servisleri Durdur)
         run: |
           Write-Host "Dosyalari kilitleyen arka plan servisleri durduruluyor..."
-          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend")
+          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv")
           foreach ($svc in $killerServices) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
@@ -56,32 +51,58 @@ jobs:
           exit 0
 
       # ==========================================
-      # IŞIK HIZINDA SİLME (CMD RD /S /Q ve DEL /F /S /Q)
+      # ULTRA TURBO SİLME (Batch Motoru ve Paralel DISM)
       # ==========================================
-      - name: TURBO SİLME (CMD Motoru ile Saniyeler İçinde)
+      - name: ULTRA TURBO SİLME (Hedef 5 Dakikanın Altı)
         run: |
-          Write-Host "CMD Motoru ile isik hizinda silme baslatildi..."
+          Write-Host "Isik hizinda silme baslatildi. DISM arka planda calisiyor..."
           
-          $targetDirs = @(
-            "C:\hostedtoolcache", "C:\Program Files\Microsoft Visual Studio", 
-            "C:\Program Files (x86)\Microsoft Visual Studio", "C:\Program Files\Docker", 
-            "C:\ProgramData\Docker", "C:\Program Files\Microsoft SQL Server", 
-            "C:\Program Files\Android", "C:\Program Files\Java", 
-            "C:\Program Files\nodejs", "C:\Program Files\dotnet", 
-            "C:\ProgramData\chocolatey"
-          )
+          # DISM'i arka plana at (Bu islem uzun surer, o calisirken biz dosyalari silecegiz)
+          $dismJob = Start-Job -ScriptBlock { Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase }
 
-          foreach ($dir in $targetDirs) {
-            if (Test-Path $dir) {
-              # 1. Önce içindeki tüm dosyaları zorla sil (Saniyeler sürer)
-              cmd.exe /c "del /f /s /q `"$dir\*.*`"" > $null 2>&1
-              # 2. Klasörün kökünü zorla sil
-              cmd.exe /c "rd /s /q `"$dir`"" > $null 2>&1
-            }
-          }
+          # Tüm devasa klasörleri tek bir .bat dosyasina yaz (PowerShell dongusu yavasligini engeller)
+          $batContent = @"
+          @echo off
+          rd /s /q "C:\hostedtoolcache"
+          rd /s /q "C:\Program Files\Microsoft Visual Studio"
+          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
+          rd /s /q "C:\Program Files\Docker"
+          rd /s /q "C:\ProgramData\Docker"
+          rd /s /q "C:\Program Files\Microsoft SQL Server"
+          rd /s /q "C:\Program Files\Android"
+          rd /s /q "C:\Program Files\Java"
+          rd /s /q "C:\Program Files\nodejs"
+          rd /s /q "C:\Program Files\dotnet"
+          rd /s /q "C:\ProgramData\chocolatey"
+          rd /s /q "C:\Program Files\Microsoft SDKs"
+          rd /s /q "C:\Program Files (x86)\Microsoft SDKs"
+          rd /s /q "C:\Program Files (x86)\Windows Kits"
+          rd /s /q "C:\Program Files\Azure"
+          rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
+          rd /s /q "C:\Users\runneradmin\.nuget"
+          rd /s /q "C:\Users\runneradmin\.m2"
+          rd /s /q "C:\Users\runneradmin\.gradle"
+          rd /s /q "C:\Users\runneradmin\.android"
+          rd /s /q "C:\Windows\System32\LogFiles"
+          rd /s /q "C:\Windows\Temp"
+          rd /s /q "C:\Windows\SoftwareDistribution"
+          rd /s /q "C:\$Recycle.Bin"
+          "@
+          Set-Content -Path "C:\turbo_delete.bat" -Value $batContent
+          
+          # Batch dosyasini calistir
+          cmd.exe /c "C:\turbo_delete.bat"
+          Remove-Item -Path "C:\turbo_delete.bat" -Force -ErrorAction SilentlyContinue
+          
+          # Windows Event Loglarini temizle (Bazen GB'larca yer kaplar)
+          wevtutil el | Foreach-Object {wevtutil cl "$_"} 2>$null
+          
+          Write-Host "Dosyalar silindi. DISM'in bitmesi bekleniyor..."
+          Wait-Job $dismJob | Out-Null
+          Remove-Job $dismJob
           exit 0
 
-      - name: HAYALET UYGULAMALARI SİL (Hızlı Registry Taraması)
+      - name: HAYALET UYGULAMALARI VE KAYIT DEFTERİNİ SİL
         run: |
           cmd.exe /c "rd /s /q C:\Users\Public\Desktop" > $null 2>&1
           cmd.exe /c "rd /s /q C:\Users\runneradmin\Desktop" > $null 2>&1
@@ -95,29 +116,21 @@ jobs:
           }
           exit 0
 
-      - name: DERİN TEMİZLİK VE PAGEFILE (DISM Arka Planda)
+      - name: SANAL BELLEK (PAGEFILE) VE TEMP TEMİZLİĞİ
         run: |
-          Write-Host "DISM arka plana atiliyor..."
-          $job = Start-Job -ScriptBlock {
-            Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
-          }
-
+          # Pagefile kapat (Anında 16 GB yer açar)
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force
           powercfg -h off
           vssadmin delete shadows /all /quiet
-          Clear-RecycleBin -Force -ErrorAction SilentlyContinue
           
-          # Windows Temp ve Güncelleme Çöpleri (CMD ile)
-          cmd.exe /c "del /f /s /q C:\Windows\Temp\*.*" > $null 2>&1
+          # Windows Temp, Prefetch ve Installer kalıntıları
           cmd.exe /c "rd /s /q C:\Windows\Temp" > $null 2>&1
-          cmd.exe /c "del /f /s /q C:\Windows\SoftwareDistribution\Download\*.*" > $null 2>&1
-          cmd.exe /c "rd /s /q C:\Windows\SoftwareDistribution\Download" > $null 2>&1
+          cmd.exe /c "rd /s /q C:\Windows\Prefetch" > $null 2>&1
+          cmd.exe /c "rd /s /q C:\Windows\Installer" > $null 2>&1
+          cmd.exe /c "rd /s /q C:\ProgramData\Package Cache" > $null 2>&1
           
           New-Item -ItemType Directory -Force -Path "C:\Windows\Temp" | Out-Null
-          New-Item -ItemType Directory -Force -Path "C:\Windows\SoftwareDistribution\Download" | Out-Null
-          
-          Wait-Job $job | Out-Null
-          Remove-Job $job
+          New-Item -ItemType Directory -Force -Path "C:\Windows\Prefetch" | Out-Null
           exit 0
 
       - name: Firefox'u Kur ve Masaüstüne At
@@ -150,7 +163,7 @@ jobs:
       - name: Bağlantı Bilgilerini Göster
         run: |
           Write-Host "===================================="
-          Write-Host "     ERROR-4004 TURBO TEMİZLİK      "
+          Write-Host "   ERROR-4004 ULTRA TURBO TEMİZLİK  "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
