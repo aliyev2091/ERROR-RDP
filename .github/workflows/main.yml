@@ -10,7 +10,7 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. DETAYLI SİSTEM BİLGİLERİ VE KESİN DİSK TESPİTİ
+      # 1. DETAYLI SİSTEM BİLGİLERİ VE DİSK TÜRÜ TESPİTİ
       # ==========================================
       - name: DETAYLI SISTEM DONANIM BILGILERI
         id: sys_info
@@ -29,8 +29,8 @@ jobs:
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
           
-          # WMI ile Kesin Disk Tespiti (En Garantili Yöntem)
-          $mediaType = "SSD" # Varsayılan
+          # DİSK TESPİTİ (Gelişmiş WMI Yöntemi)
+          $mediaType = "SSD"
           try {
               $diskInfo = Get-CimInstance -ClassName Win32_DiskDrive | Where-Object { $_.Index -eq 0 }
               if ($diskInfo.Model -match "NVMe|SSD|Solid State") {
@@ -98,72 +98,81 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. PARALEL MOTOR (Hedef 85+ GB, Zaman Sınırlı)
+      # 3. SORUNSUZ VE HIZLI SİLME MOTORU (Sistem Dosyaları Hariç)
       # ==========================================
-      - name: HYPERSPEED SİLME (Hedef 85+ GB)
+      - name: HYPERSPEED SİLME (Sorunsuz Temizlik)
         run: |
-          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:16" }
+          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:8" }
           Write-Host "Silme islemleri baslatiliyor. Tespit edilen disk: $env:DISK_TYPE (Robocopy Parametresi: $mtParam)"
           
-          # 1. İşlem: hostedtoolcache (.NET ile en hızlısı) ve Visual Studio Ana Klasörleri
-          $job1 = Start-Job -ScriptBlock {
-            if (Test-Path "C:\hostedtoolcache") {
-              try { [System.IO.Directory]::Delete("C:\hostedtoolcache", $true) } catch {}
-            }
-            cmd.exe /c "rd /s /q `"C:\Program Files\Microsoft Visual Studio`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files (x86)\Microsoft Visual Studio`"" > $null 2>&1
-          }
+          New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # 2. İşlem: Diller, Veritabanları, SDK'lar ve Devasa Araçlar
-          $job2 = Start-Job -ScriptBlock {
-            cmd.exe /c "rd /s /q `"C:\Program Files\Microsoft SDKs`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\Git`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\Microsoft SQL Server`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\PostgreSQL`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\MySQL`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\R`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\Rtools`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\nodejs`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\dotnet`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\Java`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\Android`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\Docker`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\ProgramData\Docker`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\Azure`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\ProgramData\chocolatey`"" > $null 2>&1
-          }
+          # KİLİTLENEN VE SÜREYİ UZATAN SİSTEM DOSYALARI (WinSxS, Installer, Panther vb.) LİSTEDEN ÇIKARILDI.
+          # Sadece kesin silinen ve devasa yer kaplayan programlar bırakıldı.
+          $batContent = @"
+          @echo off
           
-          # 3. İşlem: Tarayıcılar, Installer ve Sistem Çöpleri
-          $job3 = Start-Job -ScriptBlock {
-            cmd.exe /c "rd /s /q `"C:\Program Files (x86)\Microsoft\Edge`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Program Files\Google`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\ProgramData\Package Cache`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Windows\Installer`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Windows\SoftwareDistribution`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Windows\Help`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Windows\LiveKernelReports`"" > $null 2>&1
-          }
+          :: 1. Hostedtoolcache ve Visual Studio (En Büyük Çöp)
+          robocopy C:\empty_dir "C:\hostedtoolcache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\hostedtoolcache"
+          robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Microsoft Visual Studio"
+          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
           
-          # 4. İşlem: AppData, Önbellekler ve Ufak Çöpler (Zaman kaybettirenler çıkarıldı)
-          $job4 = Start-Job -ScriptBlock {
-            cmd.exe /c "rd /s /q `"C:\Users\runneradmin\.nuget`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Users\runneradmin\.m2`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Users\runneradmin\.gradle`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Users\runneradmin\.android`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Users\runneradmin\AppData\Local\Temp`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Windows\Temp`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Windows\Prefetch`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\ProgramData\Microsoft\Network\Downloader`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\ProgramData\Microsoft\Windows\WER`"" > $null 2>&1
-          }
+          :: 2. Veritabanları ve Diller
+          robocopy C:\empty_dir "C:\Program Files\Microsoft SQL Server" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Microsoft SQL Server"
+          robocopy C:\empty_dir "C:\Program Files\Android" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Android"
+          robocopy C:\empty_dir "C:\Program Files\Git" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Git"
+          robocopy C:\empty_dir "C:\Program Files\Docker" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Docker"
           
-          # 210 Saniye (3.5 Dakika) Kesin Sınır. Ne silinirse kâr. Kalanı zorla kapat (süreyi uzatmasın)
-          Write-Host "Silme islemleri yapiliyor. Maksimum 3.5 dakika bekleniyor..."
-          Wait-Job $job1, $job2, $job3, $job4 -Timeout 210 | Out-Null
+          :: 3. Önbellekler ve Tarayıcılar
+          robocopy C:\empty_dir "C:\ProgramData\Package Cache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\ProgramData\Package Cache"
+          robocopy C:\empty_dir "C:\Windows\SoftwareDistribution" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Windows\SoftwareDistribution"
+          robocopy C:\empty_dir "C:\Program Files\Google" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Google"
+          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft\Edge" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
           
-          # 3.5 dakika sonunda zorla kapat (Hata vermesini engeller ve süreyi kısaltır)
-          Stop-Job $job1, $job2, $job3, $job4 -ErrorAction SilentlyContinue
-          Remove-Job $job1, $job2, $job3, $job4 -Force -ErrorAction SilentlyContinue
+          :: 4. Diğer Araçlar ve Önbellekler
+          rd /s /q "C:\Program Files\PostgreSQL"
+          rd /s /q "C:\Program Files\MySQL"
+          rd /s /q "C:\Program Files\R"
+          rd /s /q "C:\Program Files\Rtools"
+          rd /s /q "C:\Program Files\nodejs"
+          rd /s /q "C:\Program Files\dotnet"
+          rd /s /q "C:\Program Files\Java"
+          rd /s /q "C:\Program Files\Azure"
+          rd /s /q "C:\ProgramData\Docker"
+          rd /s /q "C:\ProgramData\chocolatey"
+          rd /s /q "C:\Windows\Temp"
+          rd /s /q "C:\Windows\Prefetch"
+          rd /s /q "C:\Users\runneradmin\.nuget"
+          rd /s /q "C:\Users\runneradmin\.m2"
+          rd /s /q "C:\Users\runneradmin\.gradle"
+          rd /s /q "C:\Users\runneradmin\.android"
+          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp"
+          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader"
+          
+          :: KRİTİK NOKTA: Hata olsa bile GitHub'a başarılı dön ki kırmızı çarpı olmasın.
+          exit /b 0
+          "@
+          Set-Content -Path "C:\fast_delete.bat" -Value $batContent
+          
+          # Zorla kapatma YOK. İşlem bitene kadar bekliyor.
+          Write-Host "Silme islemleri yapiliyor. Hata veren sistem dosyalari listeden cikarildigi icin hizli bitecek..."
+          $p = Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -PassThru
+          $p.WaitForExit()
+          
+          # Temizlik
+          Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
           exit 0
@@ -183,7 +192,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 4. SANAL BELLEK VE HAZIRDA BEKLETME (+10 GB Garantili)
+      # 4. SANAL BELLEK VE HAZIRDA BEKLETME
       # ==========================================
       - name: SANAL BELLEK (PAGEFILE) VE TEMP TEMİZLİĞİ
         run: |
