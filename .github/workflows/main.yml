@@ -65,10 +65,11 @@ jobs:
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
           exit 0
 
-      - name: Dosya Kilitlerini Aç (Süreçleri ve Servisleri Öldür)
+      - name: Dosya Kilitlerini Aç (Visual Studio Setup Dahil)
         run: |
           Write-Host "Kilitli dosyalari tutan süreçler zorla kapatiliyor..."
-          $processes = Get-Process | Where-Object { $_.Path -match "Visual Studio|ServiceFabric|dotnet|java|node|docker|Unity|VBCSCompiler|msiexec" }
+          # Özellikle Visual Studio Setup süreçlerini öldürüyoruz ki o 'Access Denied' hatasi vermesin
+          $processes = Get-Process | Where-Object { $_.Path -match "Visual Studio|ServiceFabric|dotnet|java|node|docker|Unity|VBCSCompiler|msiexec|VSIXInstaller|Setup" }
           foreach ($p in $processes) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
           
           $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller")
@@ -79,52 +80,74 @@ jobs:
           exit 0
 
       # ==========================================
-      # HEDEF 90 GB (Zaman Sınırı Kalktı, Yavaşlatan Klasörler Çıkarıldı)
+      # 90 GB HEDEFİ İÇİN KESİN ÇÖZÜM (Robocopy + CMD)
       # ==========================================
       - name: HYPERSPEED SİLME (Hedef 90 GB Garantili)
         run: |
-          Write-Host "Isik hizinda silme baslatildi. Yavaslatan SDK klasoru atlaniyor..."
+          Write-Host "Isik hizinda silme baslatildi. Klasorlerin ici robocopy ile bosaltiliyor..."
           
-          # DİKKAT: "Microsoft SDKs" (ServiceFabric) listeden çıkarıldı. O klasör 10 dakika bekletiyordu.
-          # Onun yerine Edge, Chrome ve Installer gibi devasa çöp üreticileri eklendi.
+          # Boş bir klasör oluştur (Robocopy'nin içini boşaltması için)
+          New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
+          
           $batContent = @"
           @echo off
+          :: 1. Klasörlerin İÇİNİ saniyeler içinde boşalt (Robocopy MFT kullanır, çok hızlıdır)
+          robocopy C:\empty_dir "C:\hostedtoolcache" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\ProgramData\Microsoft\VisualStudio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\Docker" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\ProgramData\Docker" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files (x86)\Windows Kits" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\Microsoft SDKs" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\Android" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\Java" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\dotnet" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\ProgramData\chocolatey" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\Google" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft\Edge" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\ProgramData\Package Cache" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          
+          :: 2. İçi boşalan klasörleri anında sil (rd komutu boş klasörü anında siler)
           rd /s /q "C:\hostedtoolcache"
           rd /s /q "C:\Program Files\Microsoft Visual Studio"
           rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
           rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
           rd /s /q "C:\Program Files\Docker"
           rd /s /q "C:\ProgramData\Docker"
-          rd /s /q "C:\Program Files\Microsoft SQL Server"
+          rd /s /q "C:\Program Files (x86)\Windows Kits"
+          rd /s /q "C:\Program Files\Microsoft SDKs"
           rd /s /q "C:\Program Files\Android"
           rd /s /q "C:\Program Files\Java"
-          rd /s /q "C:\Program Files\nodejs"
           rd /s /q "C:\Program Files\dotnet"
           rd /s /q "C:\ProgramData\chocolatey"
-          rd /s /q "C:\Program Files (x86)\Windows Kits"
-          rd /s /q "C:\Program Files\Azure"
           rd /s /q "C:\Program Files\Google"
           rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
+          rd /s /q "C:\ProgramData\Package Cache"
+          
+          :: 3. Ekstra 3 GB için Windows ve AppData çöpleri
+          rd /s /q "C:\Windows\Temp"
+          rd /s /q "C:\Windows\Prefetch"
+          rd /s /q "C:\Windows\SoftwareDistribution"
+          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp"
+          rd /s /q "C:\Windows\Installer"
+          rd /s /q "C:\`$Recycle.Bin"
           rd /s /q "C:\Users\runneradmin\.nuget"
           rd /s /q "C:\Users\runneradmin\.m2"
           rd /s /q "C:\Users\runneradmin\.gradle"
           rd /s /q "C:\Users\runneradmin\.android"
-          rd /s /q "C:\Windows\Temp"
-          rd /s /q "C:\Windows\SoftwareDistribution"
-          rd /s /q "C:\`$Recycle.Bin"
-          rd /s /q "C:\Windows\Prefetch"
-          rd /s /q "C:\Windows\Installer"
-          rd /s /q "C:\ProgramData\Package Cache"
+          exit
           "@
+          
           Set-Content -Path "C:\hyperspeed_delete.bat" -Value $batContent
           
-          # Dosyayi calistir ve bitmesini bekle
+          # Batch dosyasini calistir ve bitmesini bekle
           cmd.exe /c "C:\hyperspeed_delete.bat"
+          
           Remove-Item -Path "C:\hyperspeed_delete.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           
-          Write-Host "Kalan ufak tefekler siliniyor..."
-          cmd.exe /c "rd /s /q C:\Windows\WinSxS\Backup" > $null 2>&1
-          
+          Write-Host "Silme islemi tamamlandi!"
           exit 0
 
       - name: HAYALET UYGULAMALARI VE KAYIT DEFTERİNİ SİL
@@ -146,14 +169,6 @@ jobs:
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force
           powercfg -h off
           vssadmin delete shadows /all /quiet
-          
-          cmd.exe /c "rd /s /q C:\Windows\Temp" > $null 2>&1
-          cmd.exe /c "rd /s /q C:\Windows\Prefetch" > $null 2>&1
-          cmd.exe /c "rd /s /q C:\Windows\Installer" > $null 2>&1
-          cmd.exe /c "rd /s /q C:\ProgramData\Package Cache" > $null 2>&1
-          
-          New-Item -ItemType Directory -Force -Path "C:\Windows\Temp" | Out-Null
-          New-Item -ItemType Directory -Force -Path "C:\Windows\Prefetch" | Out-Null
           exit 0
 
       - name: Firefox'u Kur ve Masaüstüne At
