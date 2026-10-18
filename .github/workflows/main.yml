@@ -77,36 +77,88 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. ROBLINUX MOTORU (Sadece En Ağır Dosyalar, Beklemeli)
+      # 3. ROBLINUX FULL MOTORU (Hedef 90+ GB, Süre Maks 4 Dk)
       # ==========================================
-      - name: HYPERSPEED SİLME (Hedef 85+ GB)
+      - name: HYPERSPEED SİLME (Hedef 90+ GB Garantili)
         run: |
-          Write-Host "Silme islemleri baslatiliyor. Robocopy ve CMD motoru calisiyor..."
+          Write-Host "Silme islemleri baslatiliyor. Sadece Robocopy motoru calisiyor..."
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # ROBLINUX: SADECE en agir 3 klasoru siliyoruz. Inatci rd komutlari cikarildi.
+          # PowerShell'in yavaş Remove-Item'ı yerine TÜM ağır dosyaları tek bir CMD içine robocopy ile doldurduk.
           $batContent = @"
           @echo off
           robocopy C:\empty_dir "C:\hostedtoolcache" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\hostedtoolcache"
+          
           robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Microsoft Visual Studio"
+          
           robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
+          
+          robocopy C:\empty_dir "C:\ProgramData\Microsoft\VisualStudio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
+          
+          robocopy C:\empty_dir "C:\Program Files\Microsoft SQL Server" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Microsoft SQL Server"
+          
+          robocopy C:\empty_dir "C:\Program Files\Android" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Android"
+          
+          robocopy C:\empty_dir "C:\Program Files\Git" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Git"
+          
+          robocopy C:\empty_dir "C:\Program Files\Docker" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Docker"
+          
+          robocopy C:\empty_dir "C:\ProgramData\Docker" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\ProgramData\Docker"
+          
+          robocopy C:\empty_dir "C:\ProgramData\Package Cache" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\ProgramData\Package Cache"
+          
+          robocopy C:\empty_dir "C:\Windows\Installer" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Windows\Installer"
+          
+          robocopy C:\empty_dir "C:\Windows\SoftwareDistribution" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Windows\SoftwareDistribution"
+          
+          robocopy C:\empty_dir "C:\Program Files\Google" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Google"
+          
+          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft\Edge" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
+          
+          rd /s /q "C:\Program Files\PostgreSQL"
+          rd /s /q "C:\Program Files\MySQL"
+          rd /s /q "C:\Program Files\R"
+          rd /s /q "C:\Program Files\Rtools"
+          rd /s /q "C:\Program Files\nodejs"
+          rd /s /q "C:\Program Files\dotnet"
+          rd /s /q "C:\Program Files\Java"
+          rd /s /q "C:\Program Files\Azure"
+          rd /s /q "C:\ProgramData\chocolatey"
+          rd /s /q "C:\Windows\Temp"
+          rd /s /q "C:\Windows\Prefetch"
+          rd /s /q "C:\Windows\Panther"
+          rd /s /q "C:\Windows\Logs"
+          rd /s /q "C:\Windows\Help"
+          rd /s /q "C:\Windows\LiveKernelReports"
+          rd /s /q "C:\Users\runneradmin\.nuget"
+          rd /s /q "C:\Users\runneradmin\.m2"
+          rd /s /q "C:\Users\runneradmin\.gradle"
+          rd /s /q "C:\Users\runneradmin\.android"
+          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp"
+          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader"
+          rd /s /q "C:\ProgramData\Microsoft\Windows\WER"
           exit
           "@
           Set-Content -Path "C:\fast_delete.bat" -Value $batContent
           
-          # KESİNLİKLE ZORLA KAPATMA YOK. Sadece -Wait ile bitmesini bekliyoruz. (Süreç 2-3 dakikada bitecek)
+          # Sadece Robocopy ile siliniyor, zorla kapatma yok, bitmesini bekliyor (-Wait)
           Write-Host "Silme islemleri yapiliyor. Robocopy kullanildigi icin cok hizli bitecek..."
           Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -Wait
-          
-          # Ekstra temizlikler (Sadece hızlı silinenler)
-          Remove-Item -Path "C:\Program Files\Microsoft SQL Server" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\MySQL" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\Android" -Recurse -Force -ErrorAction SilentlyContinue
           
           # Temizlik
           Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
@@ -130,7 +182,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 4. SANAL BELLEK VE TEMP TEMİZLİĞİ
+      # 4. SANAL BELLEK VE HAZIRDA BEKLETME (10 GB Ekstra)
       # ==========================================
       - name: SANAL BELLEK (PAGEFILE) VE TEMP TEMİZLİĞİ
         run: |
