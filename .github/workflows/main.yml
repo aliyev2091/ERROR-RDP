@@ -77,18 +77,17 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. ROBLINUX MOTORU (Zaman Sınırı Yok, Kesin Çözüm)
+      # 3. ROBLINUX MOTORU (Süre Sınırlı, Hızlı Bitiş)
       # ==========================================
-      - name: HYPERSPEED SİLME (Hedef 85+ GB)
+      - name: HYPERSPEED SİLME (Hedef 85+ GB, Maks 4 Dk)
         run: |
           Write-Host "Silme islemleri baslatiliyor. Robocopy ve CMD motoru calisiyor..."
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # Tek bir BAT dosyasında hem robocopy (hızlı boşaltma) hem de rd (kalıcı silme) kullanıyoruz
+          # Robocopy ile ana kütleleri saniyeler içinde sil, ardından kalanları rd ile temizle
           $batContent = @"
           @echo off
-          :: En agir klasorleri Robocopy ile saniyeler icinde bosalt
           robocopy C:\empty_dir "C:\hostedtoolcache" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\hostedtoolcache"
           robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
@@ -96,7 +95,6 @@ jobs:
           robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
           
-          :: Diger agir programlari normal rd ile sil
           rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
           rd /s /q "C:\Program Files\Git"
           rd /s /q "C:\Program Files\Microsoft SQL Server"
@@ -134,9 +132,17 @@ jobs:
           "@
           Set-Content -Path "C:\fast_delete.bat" -Value $batContent
           
-          # Start-Process -Wait kullanarak bitmesini bekle. (Zorla kapatma YOK, bitene kadar bekler)
-          Write-Host "Silme islemleri yapiliyor. Robocopy kullanildigi icin hizli bitecek..."
-          Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -Wait
+          # CMD'yi arka planda başlat
+          $p = Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -PassThru
+          
+          # Tam 210 Saniye (3.5 Dakika) bekle. Robocopy ana alanı çoktan açmış olacak.
+          Write-Host "Silme islemleri yapiliyor. Maksimum 3.5 dakika bekleniyor..."
+          Start-Sleep -Seconds 210
+          
+          # 3.5 dakika sonunda hala takılan inatçı dosyalar varsa işlemi zorla kapat
+          if (-not $p.HasExited) {
+              Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
           
           # Temizlik
           Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
