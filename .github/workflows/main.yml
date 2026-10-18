@@ -9,6 +9,50 @@ jobs:
     timeout-minutes: 3600 # 60 saat
     
     steps:
+      # ==========================================
+      # EN ÜSTTE SİSTEM BİLGİLERİ
+      # ==========================================
+      - name: SISTEM DONANIM BILGILERI
+        run: |
+          Write-Host "=================================================="
+          Write-Host "             SISTEM DONANIM BILGILERI              "
+          Write-Host "=================================================="
+          
+          # 1. Islemci (CPU)
+          $cpu = Get-CimInstance -ClassName Win32_Processor
+          Write-Host "[+] Islemci (CPU) : $($cpu.Name)"
+          Write-Host "[+] Cekirdek (Core): $($cpu.NumberOfCores) Cekirdek / $($cpu.NumberOfLogicalProcessors) Mantiksal Islemci"
+          
+          # 2. RAM
+          $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
+          Write-Host "[+] RAM Miktari   : $ram GB"
+          
+          # 3. Disk Tipi (SSD mi HDD mi?)
+          Write-Host "--------------------------------------------------"
+          $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object FriendlyName, MediaType, @{Name="SizeGB";Expression={[math]::Round($_.Size/1GB, 2)}}
+          if ($disks) {
+              foreach ($disk in $disks) {
+                  if (-not $disk.MediaType) { $media = "Bilinmiyor" } else { $media = $disk.MediaType }
+                  Write-Host "[+] Disk          : $($disk.FriendlyName) | Tipi: $media | Kapasite: $($disk.SizeGB) GB"
+              }
+          } else {
+              # Get-PhysicalDisk calismazsa alternatif yontem
+              $altDisks = Get-CimInstance -ClassName Win32_DiskDrive | Select-Object Model, MediaType, @{Name="SizeGB";Expression={[math]::Round($_.Size/1GB, 2)}}
+              foreach ($d in $altDisks) {
+                  Write-Host "[+] Disk          : $($d.Model) | Tipi: $($d.MediaType) | Kapasite: $($d.SizeGB) GB"
+              }
+          }
+          
+          # 4. C: Surucusu Bos Alan
+          $cDrive = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
+          $freeSpace = [math]::Round($cDrive.FreeSpace / 1GB, 2)
+          $totalSpace = [math]::Round($cDrive.Size / 1GB, 2)
+          Write-Host "--------------------------------------------------"
+          Write-Host "[+] C: Surucusu   : $freeSpace GB Bos / $totalSpace GB Toplam"
+          Write-Host "=================================================="
+          Write-Host "Temizlik baslatiliyor, lutfen bekleyin..."
+          exit 0
+
       - name: Tailscale'i Başlat
         uses: tailscale/github-action@v3
         with:
@@ -35,45 +79,31 @@ jobs:
         run: |
           Write-Host "Hayalet uygulamalar ve izleri siliniyor..."
           
-          # 1. Başlat Menüsündeki Tüm Kısayolları Sil
           Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\runneradmin\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
           
-          # 2. Edge, Python, Chrome için Kayıt Defteri (App Paths) Temizliği
           $appPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\*", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\*")
           foreach ($path in $appPaths) {
-            Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object { 
-              $_.PSChildName -match "msedge|chrome|python|unity|visualstudio" 
-            } | ForEach-Object {
-              Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
-            }
+            Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match "msedge|chrome|python|unity|visualstudio" } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
           }
           
-          # 3. Windows Arama İndeksini ve Veritabanını Sıfırla
           Remove-Item -Path "C:\ProgramData\Microsoft\Search\Data\Applications\Windows\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
-          # 4. Derinlerdeki AppData Kalıntılarını Sil (Edge, Python vs.)
           Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Microsoft\Edge*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Packages\*Edge*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Programs\Python\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
           exit 0
 
       - name: BÜYÜK SÖMÜRÜ (Diskte Yer Açma)
         run: |
-          # Masaüstü ve Programlar
           Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\hostedtoolcache\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
-          # Edge ve Python'un ana klasörlerini zorla sil (System32 içindekiler hariç)
           Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\Google\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Python*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\Python*" -Recurse -Force -ErrorAction SilentlyContinue
 
-          # Windows Log, Dump ve Güncelleme Kalıntıları (Diski Uçurur)
           Remove-Item -Path "C:\Windows\Logs\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Panther\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Minidump\*" -Recurse -Force -ErrorAction SilentlyContinue
@@ -89,12 +119,8 @@ jobs:
 
       - name: 80 GB BARİYERİNİ AŞ (Derin Temizlik)
         run: |
-          Write-Host "Sistem derinlikleri temizleniyor..."
-          # Daha önce çalışan DISM temizliği + SPSuperseded (Eski güncelleme yedekleri)
           Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
           Dism.exe /online /Cleanup-Image /SPSuperseded
-          
-          # Pagefile Kapatma
           try {
             $sys = Get-CimInstance -ClassName Win32_ComputerSystem
             Set-CimInstance -InputObject $sys -Property @{AutomaticManagedPagefile=$false}
@@ -153,5 +179,5 @@ jobs:
           
       - name: Sistemi 60 Saat Boyunca Açık Tut
         run: |
-          Write-Host "Hayaletler temizlendi, disk ucuruldu. 60 saat uyku basliyor..."
+          Write-Host "Islem tamam. 60 saat uyku basliyor..."
           Start-Sleep -Seconds 216000 
