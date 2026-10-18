@@ -31,66 +31,79 @@ jobs:
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
           exit 0
 
-      - name: BÜYÜK SÖMÜRÜ (Dosyalar, Kayıt Defteri ve Masaüstü)
+      - name: HAYALET AVI (Registry, Başlat Menüsü ve Arama İndeksi)
         run: |
-          # Masaüstü, Hayalet İkonlar ve Programlar
+          Write-Host "Hayalet uygulamalar ve izleri siliniyor..."
+          
+          # 1. Başlat Menüsündeki Tüm Kısayolları Sil
+          Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # 2. Edge, Python, Chrome için Kayıt Defteri (App Paths) Temizliği
+          $appPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\*", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\*")
+          foreach ($path in $appPaths) {
+            Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object { 
+              $_.PSChildName -match "msedge|chrome|python|unity|visualstudio" 
+            } | ForEach-Object {
+              Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+          
+          # 3. Windows Arama İndeksini ve Veritabanını Sıfırla
+          Remove-Item -Path "C:\ProgramData\Microsoft\Search\Data\Applications\Windows\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # 4. Derinlerdeki AppData Kalıntılarını Sil (Edge, Python vs.)
+          Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Microsoft\Edge*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Packages\*Edge*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Programs\Python\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          exit 0
+
+      - name: BÜYÜK SÖMÜRÜ (Diskte Yer Açma)
+        run: |
+          # Masaüstü ve Programlar
           Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\hostedtoolcache\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\Microsoft Visual Studio\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files (x86)\Microsoft Visual Studio\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\Android\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\dotnet\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\Java\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\nodejs\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\Google\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\Unity\*" -Recurse -Force -ErrorAction SilentlyContinue
           
-          # Kayıt Defteri Temizliği
-          $uninstallPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*")
-          foreach ($path in $uninstallPaths) {
-            Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match "Chrome|Edge|Unity|Visual Studio|Python|Java|Node" } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
-          }
+          # Edge ve Python'un ana klasörlerini zorla sil (System32 içindekiler hariç)
+          Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Program Files\Google\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Python*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Program Files\Python*" -Recurse -Force -ErrorAction SilentlyContinue
 
-          Get-AppxPackage -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue
+          # Windows Log, Dump ve Güncelleme Kalıntıları (Diski Uçurur)
+          Remove-Item -Path "C:\Windows\Logs\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Panther\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Minidump\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\memory.dmp" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\SoftwareDistribution\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Installer\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\ProgramData\Package Cache\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
           powercfg -h off
           vssadmin delete shadows /all /quiet
           Clear-RecycleBin -Force -ErrorAction SilentlyContinue
-          
-          # Geçici Dosyalar
-          Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Prefetch\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Installer\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\ProgramData\Package Cache\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
           exit 0
 
-      - name: 80 GB BARİYERİNİ AŞ (WinSxS ve Pagefile Temizliği)
+      - name: 80 GB BARİYERİNİ AŞ (Derin Temizlik)
         run: |
-          Write-Host "Windows'un derinliklerindeki çöpler temizleniyor (DISM)..."
+          Write-Host "Sistem derinlikleri temizleniyor..."
+          # Daha önce çalışan DISM temizliği + SPSuperseded (Eski güncelleme yedekleri)
           Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
+          Dism.exe /online /Cleanup-Image /SPSuperseded
           
-          Write-Host "Sanal Bellek (Pagefile) kapatiliyor..."
+          # Pagefile Kapatma
           try {
-            # YENİ NESİL CIM KOMUTLARI (Put() hatasını çözer)
             $sys = Get-CimInstance -ClassName Win32_ComputerSystem
             Set-CimInstance -InputObject $sys -Property @{AutomaticManagedPagefile=$false}
-            
             $pagefile = Get-CimInstance -ClassName Win32_PageFileSetting
-            if ($pagefile) {
-              Set-CimInstance -InputObject $pagefile -Property @{InitialSize=0; MaximumSize=0}
-            }
-            Write-Host "Pagefile basariyla kapatildi."
-          } catch {
-            Write-Host "Pagefile kapatilamadi, ama sorun yok. Devam ediliyor..."
-          }
+            if ($pagefile) { Set-CimInstance -InputObject $pagefile -Property @{InitialSize=0; MaximumSize=0} }
+          } catch {}
           exit 0
 
-      - name: Firefox'u Kur ve Masaüstüne Kısayol At
+      - name: Firefox'u Kur ve Masaüstüne At
         run: |
           $firefoxUrl = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US"
           Invoke-WebRequest -Uri $firefoxUrl -OutFile "$env:TEMP\firefox_installer.exe"
@@ -107,7 +120,7 @@ jobs:
           $Shortcut2.Save()
           exit 0
 
-      - name: Gereksiz Servisleri ve FULL PERFORMANS Ayarlarını Uygula
+      - name: Servisleri Kapat ve FULL PERFORMANS
         run: |
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc")
           foreach ($svc in $services) {
@@ -129,7 +142,7 @@ jobs:
       - name: Bağlantı Bilgilerini Göster
         run: |
           Write-Host "===================================="
-          Write-Host "   ERROR-4004 80GB+ TEMİZLİK MODU   "
+          Write-Host "   ERROR-4004 ULTIMATE TEMİZLİK     "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
@@ -140,5 +153,5 @@ jobs:
           
       - name: Sistemi 60 Saat Boyunca Açık Tut
         run: |
-          Write-Host "Sistemde 80 GB'tan fazla yer acildi. 60 saat uyku basliyor..."
+          Write-Host "Hayaletler temizlendi, disk ucuruldu. 60 saat uyku basliyor..."
           Start-Sleep -Seconds 216000 
