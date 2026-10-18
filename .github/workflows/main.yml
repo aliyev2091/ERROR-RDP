@@ -9,9 +9,6 @@ jobs:
     timeout-minutes: 3600 # 60 saat
     
     steps:
-      # ==========================================
-      # 1. SİSTEM DONANIM BİLGİLERİ (Aynı Kalıyor)
-      # ==========================================
       - name: SISTEM DONANIM BILGILERI
         run: |
           Write-Host "=================================================="
@@ -46,12 +43,24 @@ jobs:
           exit 0
 
       # ==========================================
-      # 2. TURBO TEMİZLİK (Paralel ve CMD Destekli)
+      # TURBO HIZLANDIRICI: DOSYALARI KİLİTLEYEN SERVİSLERİ DURDUR
       # ==========================================
-      - name: TURBO SİLME (Docker, VS, HostedToolCache)
+      - name: Dosya Kilitlerini Aç (Servisleri Durdur)
         run: |
-          Write-Host "Turbo silme baslatildi (64 thread)..."
-          New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
+          Write-Host "Dosyalari kilitleyen arka plan servisleri durduruluyor..."
+          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend")
+          foreach ($svc in $killerServices) {
+            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+          }
+          exit 0
+
+      # ==========================================
+      # IŞIK HIZINDA SİLME (CMD RD /S /Q ve DEL /F /S /Q)
+      # ==========================================
+      - name: TURBO SİLME (CMD Motoru ile Saniyeler İçinde)
+        run: |
+          Write-Host "CMD Motoru ile isik hizinda silme baslatildi..."
           
           $targetDirs = @(
             "C:\hostedtoolcache", "C:\Program Files\Microsoft Visual Studio", 
@@ -64,59 +73,50 @@ jobs:
 
           foreach ($dir in $targetDirs) {
             if (Test-Path $dir) {
-              # /MT:64 ile 64 kanaldan paralel silme, ardından CMD ile zorla kaldırma
-              robocopy "C:\empty_dir" "$dir" /MIR /MT:64 /R:0 /W:0 /NFL /NDL /NJH /NJS | Out-Null
-              cmd.exe /c "rd /s /q `"$dir`"" 2>$null
+              # 1. Önce içindeki tüm dosyaları zorla sil (Saniyeler sürer)
+              cmd.exe /c "del /f /s /q `"$dir\*.*`"" > $null 2>&1
+              # 2. Klasörün kökünü zorla sil
+              cmd.exe /c "rd /s /q `"$dir`"" > $null 2>&1
             }
           }
-          cmd.exe /c "rd /s /q C:\empty_dir" 2>$null
           exit 0
 
       - name: HAYALET UYGULAMALARI SİL (Hızlı Registry Taraması)
         run: |
-          # Hızlı CMD silmeleri
-          cmd.exe /c "rd /s /q C:\Users\Public\Desktop" 2>$null
-          cmd.exe /c "rd /s /q C:\Users\runneradmin\Desktop" 2>$null
-          cmd.exe /c "rd /s /q C:\Users\ERROR-4004\Desktop" 2>$null
+          cmd.exe /c "rd /s /q C:\Users\Public\Desktop" > $null 2>&1
+          cmd.exe /c "rd /s /q C:\Users\runneradmin\Desktop" > $null 2>&1
+          cmd.exe /c "rd /s /q C:\Users\ERROR-4004\Desktop" > $null 2>&1
           New-Item -ItemType Directory -Force -Path "C:\Users\Public\Desktop" | Out-Null
           New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
 
-          # Registry Hayalet Temizliği
           $uninstallPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*")
           foreach ($path in $uninstallPaths) {
             Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match "Edge|Chrome|Python|Unity|Visual Studio" } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
           }
           exit 0
 
-      # ==========================================
-      # 3. ARKA PLAN İŞLEMLERİ (DISM vs.)
-      # ==========================================
-      - name: DERİN TEMİZLİK VE PAGEFILE (Arka Planda Çalışır)
+      - name: DERİN TEMİZLİK VE PAGEFILE (DISM Arka Planda)
         run: |
-          Write-Host "DISM ve Pagefile islemleri arka plana atiliyor (Hiz icin)..."
-          
-          # Arka plan işi (DISM çok yavaştır, o çalışırken biz ön tarafta devam edeceğiz)
+          Write-Host "DISM arka plana atiliyor..."
           $job = Start-Job -ScriptBlock {
             Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
-            Dism.exe /online /Cleanup-Image /SPSuperseded
           }
 
-          # Pagefile Kayıt Defteri Ayarı (Anında gerçekleşir)
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force
           powercfg -h off
           vssadmin delete shadows /all /quiet
           Clear-RecycleBin -Force -ErrorAction SilentlyContinue
           
-          # Windows Çöplerini hızlıca sil
-          cmd.exe /c "rd /s /q C:\Windows\Temp" 2>$null
-          cmd.exe /c "rd /s /q C:\Windows\SoftwareDistribution\Download" 2>$null
-          cmd.exe /c "rd /s /q C:\Windows\Prefetch" 2>$null
+          # Windows Temp ve Güncelleme Çöpleri (CMD ile)
+          cmd.exe /c "del /f /s /q C:\Windows\Temp\*.*" > $null 2>&1
+          cmd.exe /c "rd /s /q C:\Windows\Temp" > $null 2>&1
+          cmd.exe /c "del /f /s /q C:\Windows\SoftwareDistribution\Download\*.*" > $null 2>&1
+          cmd.exe /c "rd /s /q C:\Windows\SoftwareDistribution\Download" > $null 2>&1
+          
           New-Item -ItemType Directory -Force -Path "C:\Windows\Temp" | Out-Null
           New-Item -ItemType Directory -Force -Path "C:\Windows\SoftwareDistribution\Download" | Out-Null
           
-          Write-Host "Arka plan (DISM) isleminin bitmesi bekleniyor..."
           Wait-Job $job | Out-Null
-          Receive-Job $job
           Remove-Job $job
           exit 0
 
