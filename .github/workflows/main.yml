@@ -13,6 +13,7 @@ jobs:
       # 1. DETAYLI SİSTEM BİLGİLERİ VE DİSK TÜRÜ TESPİTİ
       # ==========================================
       - name: DETAYLI SISTEM DONANIM BILGILERI
+        id: sys_info
         run: |
           Write-Host "================================================================="
           Write-Host "                 DETAYLI SISTEM BILGILERI                        "
@@ -42,7 +43,9 @@ jobs:
           Write-Host "-----------------------------------------------------------------"
           Write-Host "[+] C: Surucusu     : $freeGB GB Bos / $totalGB GB Toplam"
           Write-Host "================================================================="
-          Write-Host "Cekirdek temizlik baslatiliyor..."
+          Write-Host "Agresif temizlik baslatiliyor..."
+          
+          if ($mediaType -eq "HDD") { echo "DISK_TYPE=HDD" >> $env:GITHUB_ENV } else { echo "DISK_TYPE=SSD" >> $env:GITHUB_ENV }
           exit 0
 
       - name: Tailscale'i Başlat
@@ -64,16 +67,17 @@ jobs:
           exit 0
 
       # ==========================================
-      # 2. DOSYALARI KİLİTLEYEN SÜREÇLERİ ZORLA ÖLDÜR
+      # 2. DOSYALARI KİLİTLEYEN SÜREÇLERİ ZORLA ÖLDÜR (Daha Agresif)
       # ==========================================
-      - name: Dosya Kilitlerini Aç (Agresif Süreç Öldürme)
+      - name: Dosya Kilitlerini Aç
         run: |
           Write-Host "Kilitli dosyalari tutan süreçler zorla kapatiliyor..."
           cmd.exe /c "taskkill /F /IM msiexec.exe /T" > $null 2>&1
           cmd.exe /c "taskkill /F /IM ServiceFabricLocalClusterManager.exe /T" > $null 2>&1
           cmd.exe /c "taskkill /F /IM VBCSCompiler.exe /T" > $null 2>&1
+          cmd.exe /c "taskkill /F /IM ServiceHub*.exe /T" > $null 2>&1
           
-          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller", "DoSvc")
+          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller", "DoSvc", "VSStandardCollector*", "VSStandardCollectorService*")
           foreach ($svc in $killerServices) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
@@ -81,65 +85,65 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. ZORLAMASIZ, DOĞAL HIZINDA BİTEN TEMİZLİK
+      # 3. 4 PARALEL CMD + 5 DAKİKA KESİN SINIRI
       # ==========================================
-      - name: HYPERSPEED SİLME (Maksimum Temizlik)
+      - name: HYPERSPEED SİLME (Hedef Maksimum Temizlik)
         run: |
           $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:16" }
-          Write-Host "Silme islemleri baslatiliyor. Tespit edilen disk: $env:DISK_TYPE (Robocopy Parametresi: $mtParam)"
+          Write-Host "Silme islemleri baslatiliyor. Disk: $env:DISK_TYPE (Parametre: $mtParam)"
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # WinSxS, Panther, Logs gibi kilitlenen ve yavaşlatan sistem dosyaları LİSTEDEN ÇIKARILDI.
-          # Sadece hızlı silinen devasa çöpler var. Bu sayede 5 dakikada bitecek.
-          $batContent = @"
+          # ZAMAN KAYBETTİRENLER (ProgramData\VisualStudio, WinSxS, Panther) LİSTEDEN ÇIKARILDI.
+          # Sadece hızlı silinen devasa çöpler var.
+          
+          # CMD 1: hostedtoolcache
+          $bat1 = @"
           @echo off
+          takeown /f "C:\hostedtoolcache" /r /d y > nul 2>&1
+          icacls "C:\hostedtoolcache" /grant administrators:F /t > nul 2>&1
           robocopy C:\empty_dir "C:\hostedtoolcache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\hostedtoolcache"
-          
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del1.bat" -Value $bat1
+
+          # CMD 2: Visual Studio ve Diller
+          $bat2 = @"
+          @echo off
+          takeown /f "C:\Program Files\Microsoft Visual Studio" /r /d y > nul 2>&1
+          icacls "C:\Program Files\Microsoft Visual Studio" /grant administrators:F /t > nul 2>&1
           robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Microsoft Visual Studio"
-          
           robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
-
-          robocopy C:\empty_dir "C:\ProgramData\Microsoft\VisualStudio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
-
-          robocopy C:\empty_dir "C:\Program Files\Microsoft SQL Server" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files\Microsoft SQL Server"
-          
-          robocopy C:\empty_dir "C:\Program Files\Android" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Android"
-          
-          robocopy C:\empty_dir "C:\Program Files\Git" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Git"
-          
-          robocopy C:\empty_dir "C:\Program Files\Docker" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Docker"
-          
-          robocopy C:\empty_dir "C:\ProgramData\Package Cache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\ProgramData\Package Cache"
-          
-          robocopy C:\empty_dir "C:\Windows\SoftwareDistribution" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Windows\SoftwareDistribution"
-
-          robocopy C:\empty_dir "C:\Program Files\Google" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files\Google"
-
-          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft\Edge" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
-          
-          rd /s /q "C:\Program Files\PostgreSQL"
-          rd /s /q "C:\Program Files\MySQL"
-          rd /s /q "C:\Program Files\R"
-          rd /s /q "C:\Program Files\Rtools"
+          rd /s /q "C:\Program Files\Java"
           rd /s /q "C:\Program Files\nodejs"
           rd /s /q "C:\Program Files\dotnet"
-          rd /s /q "C:\Program Files\Java"
-          rd /s /q "C:\Program Files\Azure"
-          rd /s /q "C:\ProgramData\Docker"
-          rd /s /q "C:\ProgramData\chocolatey"
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del2.bat" -Value $bat2
+
+          # CMD 3: Veritabanları, Önbellekler ve Update
+          $bat3 = @"
+          @echo off
+          rd /s /q "C:\Program Files\Microsoft SQL Server"
+          rd /s /q "C:\Program Files\PostgreSQL"
+          rd /s /q "C:\Program Files\MySQL"
+          rd /s /q "C:\ProgramData\Package Cache"
+          rd /s /q "C:\Windows\SoftwareDistribution"
+          rd /s /q "C:\Program Files\Google"
+          rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del3.bat" -Value $bat3
+
+          # CMD 4: Temp ve Kullanıcı Çöpleri
+          $bat4 = @"
+          @echo off
           rd /s /q "C:\Windows\Temp"
           rd /s /q "C:\Windows\Prefetch"
           rd /s /q "C:\Users\runneradmin\.nuget"
@@ -150,14 +154,30 @@ jobs:
           rd /s /q "C:\ProgramData\Microsoft\Network\Downloader"
           exit /b 0
           "@
-          Set-Content -Path "C:\fast_delete.bat" -Value $batContent
+          Set-Content -Path "C:\del4.bat" -Value $bat4
           
-          # ZORLAMA YOK, TIMEOUT YOK. İşlem tamamen bitene kadar bekleyeceğiz.
-          Write-Host "Silme islemleri yapiliyor. Islem kendi dogal hizinda bitecek..."
-          Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -Wait
+          # 4 CMD PENCERESİNİ AYNI ANDA BAŞLAT
+          Write-Host "4 CMD penceresi paralel olarak calisiyor..."
+          $p1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
+          $p2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
+          $p3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
+          $p4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
+          
+          # TAM 300 SANİYE (5 DAKİKA) BEKLE
+          Write-Host "Silme islemleri yapiliyor. Maksimum 5 dakika bekleniyor..."
+          Start-Sleep -Seconds 300
+          
+          # 5 dakika sonunda hala calisan varsa zorla kapat (Süre 6-7 dk'yı geçmesin)
+          Stop-Process -Id $p1.Id -Force -ErrorAction SilentlyContinue
+          Stop-Process -Id $p2.Id -Force -ErrorAction SilentlyContinue
+          Stop-Process -Id $p3.Id -Force -ErrorAction SilentlyContinue
+          Stop-Process -Id $p4.Id -Force -ErrorAction SilentlyContinue
           
           # Temizlik
-          Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del1.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del2.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del3.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del4.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
