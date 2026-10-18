@@ -4,419 +4,186 @@ on:
   workflow_dispatch:
 
 jobs:
-  secure-rdp:
+  build:
     runs-on: windows-latest
-    timeout-minutes: 3600
-
+    timeout-minutes: 3600 # 60 saat
+    
     steps:
-      - name: Show Complete System Information
+      - name: SISTEM DONANIM BILGILERI
         run: |
-          Write-Host "============================================================" -ForegroundColor Cyan
-          Write-Host "                 DETAYLI SISTEM BILGILERI                   " -ForegroundColor Cyan
-          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host "=================================================="
+          Write-Host "             SISTEM DONANIM BILGILERI              "
+          Write-Host "=================================================="
+          $cpu = Get-CimInstance -ClassName Win32_Processor
+          $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
+          $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
+          $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+          $totalGB = [math]::Round($disk.Size / 1GB, 2)
           
-          $os = Get-CimInstance Win32_OperatingSystem
-          $cs = Get-CimInstance Win32_ComputerSystem
-          $cpu = Get-CimInstance Win32_Processor
-          
-          Write-Host "[!] Isletim Sistemi : $($os.Caption) ($($os.Version))"
-          Write-Host "[!] Bilgisayar Adi  : $($cs.Name)"
-          Write-Host "[!] Uptime          : $([math]::Round(((Get-Date) - $os.LastBootUpTime).TotalMinutes, 0)) Dakika"
-          
-          Write-Host "`n--- ISLEMCI (CPU) ---" -ForegroundColor Yellow
-          Write-Host "Model               : $($cpu.Name)"
-          Write-Host "Cekirdek / Thread   : $($cpu.NumberOfCores) Cekirdek / $($cpu.NumberOfLogicalProcessors) Thread"
-          Write-Host "Hiz (MHz)           : $($cpu.CurrentClockSpeed) MHz (Max: $($cpu.MaxClockSpeed) MHz)"
-          
-          Write-Host "`n--- BELLEK (RAM) ---" -ForegroundColor Yellow
-          $totalRam = [math]::Round($os.TotalVisibleMemorySize / 1MB, 2)
-          $freeRam  = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
-          Write-Host "Toplam RAM          : $totalRam GB"
-          Write-Host "Bos RAM             : $freeRam GB"
-          
-          Write-Host "`n--- DEPOLAMA (DISK) ---" -ForegroundColor Yellow
-          $logicalDisks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3"
-          foreach ($ld in $logicalDisks) {
-              $totalGB = [math]::Round($ld.Size / 1GB, 2)
-              $freeGB  = [math]::Round($ld.FreeSpace / 1GB, 2)
-              $usedGB  = [math]::Round($totalGB - $freeGB, 2)
-              Write-Host "$($ld.DeviceID) Surucusu       : $usedGB GB Kullanilan | $freeGB GB Bos | $totalGB GB Toplam"
-          }
-          
-          try {
-              $pd = Get-PhysicalDisk -ErrorAction Stop | Select-Object -First 1
-              $mediaType = $pd.MediaType
-              if ($mediaType -eq 'Unspecified' -or $mediaType -eq 'Unknown' -or -not $mediaType) {
-                  if ($pd.FriendlyName -match 'SSD|Solid State') { $mediaType = 'SSD' }
-                  elseif ($pd.FriendlyName -match 'HDD|Hard Disk') { $mediaType = 'HDD' }
-                  elseif ($pd.FriendlyName -match 'Virtual Disk') { $mediaType = 'Virtual (Cloud SSD)' }
-                  else { $mediaType = 'Unknown' }
-              }
-              Write-Host "Fiziksel Disk Tipi  : $mediaType ($($pd.BusType))"
-          } catch {
-              Write-Host "Fiziksel Disk Tipi  : Virtual (Cloud SSD)"
-          }
-
-          Write-Host "`n--- AG VE EKRAN KARTI ---" -ForegroundColor Yellow
-          $gpus = Get-CimInstance Win32_VideoController
-          foreach ($gpu in $gpus) {
-              Write-Host "Ekran Karti         : $($gpu.Name) | Cozunurluk: $($gpu.CurrentHorizontalResolution)x$($gpu.CurrentVerticalResolution)"
-          }
-          
-          $ips = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.*' }
-          foreach ($ip in $ips) {
-              Write-Host "Ag IP Adresi        : $($ip.IPAddress) ($($ip.InterfaceAlias))"
-          }
-          Write-Host "============================================================" -ForegroundColor Cyan
-
-      - name: Install Tailscale
-        run: |
-          $ErrorActionPreference = 'Continue'
-          $tsUrls = @("https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi")
-          $installerPath = "$env:TEMP\tailscale.msi"
-          $downloaded = $false
-          foreach ($url in $tsUrls) {
-              try {
-                  Invoke-WebRequest -Uri $url -OutFile $installerPath -UseBasicParsing -ErrorAction Stop
-                  if ((Test-Path $installerPath) -and ((Get-Item $installerPath).Length -gt 5MB)) { $downloaded = $true; break }
-              } catch {}
-          }
-          if (-not $downloaded) { Write-Error "Tailscale download failed"; exit 1 }
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
-          $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
-          $r = 0; while (-not (Test-Path $tsExe) -and $r -lt 30) { Start-Sleep 2; $r++ }
-          if (-not (Test-Path $tsExe)) { Write-Error "Tailscale install failed"; exit 1 }
-          Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
-
-      - name: Establish Tailscale Connection
-        run: |
-          $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
-          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
-          $tsIP = $null; $r = 0
-          while (-not $tsIP -and $r -lt 10) { $tsIP = & $tsExe ip -4; Start-Sleep 5; $r++ }
-          if (-not $tsIP) { Write-Error "No Tailscale IP"; exit 1 }
-          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-
-      - name: Configure Core RDP Settings
-        run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
-          netsh advfirewall firewall delete rule name="RDP-Tailscale"
-          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
-          Restart-Service -Name TermService -Force
-
-      - name: Create RDP User with Secure Password
-        run: |
-          $password = "Password!?"
-          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-          New-LocalUser -Name "ERROR-4004" -Password $securePass -AccountNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004"
-          echo "RDP_CREDS=User: ERROR-4004 | Password: $password" >> $env:GITHUB_ENV
-          if (-not (Get-LocalUser -Name "ERROR-4004")) { Write-Error "User creation failed"; exit 1 }
-
-      - name: ULTRA FAST CLEANUP
-        run: |
-          $ErrorActionPreference = 'SilentlyContinue'
-
-          $appsToRemove = @(
-            "Microsoft.BingWeather","Microsoft.BingNews","Microsoft.BingSearch","Microsoft.BingFinance",
-            "Microsoft.BingSports","Microsoft.GetHelp","Microsoft.Getstarted","Microsoft.WindowsFeedbackHub",
-            "Microsoft.MicrosoftOfficeHub","Microsoft.Todos","Microsoft.PowerAutomateDesktop",
-            "Microsoft.Windows.Photos","Microsoft.ScreenSketch","Microsoft.MSPaint","Microsoft.Paint",
-            "Microsoft.WindowsCamera","Microsoft.WindowsAlarms","Microsoft.WindowsSoundRecorder",
-            "Microsoft.People","Microsoft.SkypeApp","Clipchamp.Clipchamp","Microsoft.Xbox*",
-            "Microsoft.GamingApp","Microsoft.GamingServices","Microsoft.ZuneMusic","Microsoft.ZuneVideo",
-            "Microsoft.YourPhone","Microsoft.WindowsMaps","Microsoft.MicrosoftSolitaireCollection",
-            "Microsoft.549981C3F5F10","MicrosoftTeams","Microsoft.OneDriveSync","Microsoft.MicrosoftStickyNotes",
-            "Microsoft.WindowsCommunicationsApps","Microsoft.Wallet","Microsoft.3DBuilder",
-            "Microsoft.MixedReality.Portal","Microsoft.Microsoft3DViewer","Microsoft.Office.Sway",
-            "Microsoft.OneConnect","Microsoft.Print3D","Microsoft.NetworkSpeedTest","Microsoft.News",
-            "Microsoft.Advertising.Xaml","Microsoft.Messaging","Microsoft.OneDrive","Microsoft.WindowsNotepad",
-            "MicrosoftCorporationII.QuickAssist","MicrosoftCorporationII.MicrosoftFamily",
-            "Microsoft.Windows.DevHome","Microsoft.WindowsCalculator","Microsoft.WindowsStore",
-            "Microsoft.StorePurchaseApp","Microsoft.DesktopAppInstaller","Microsoft.WindowsTerminal",
-            "Microsoft.WebMediaExtensions","Microsoft.WebpImageExtension","Microsoft.HEIFImageExtension",
-            "Microsoft.HEVCVideoExtension","Microsoft.VP9VideoExtensions","Microsoft.AV1VideoExtension",
-            "Microsoft.MPEG2VideoExtension","Microsoft.RawImageExtension","Microsoft.AVCEncoderVideoExtension"
-          )
-          foreach ($app in $appsToRemove) {
-              Get-AppxPackage -Name $app | Remove-AppxPackage -ErrorAction SilentlyContinue
-              Get-AppxPackage -AllUsers -Name $app | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
-              Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $app } | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
-          }
-
-          Get-ChildItem "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\*\Installer\setup.exe", "$env:ProgramFiles\Microsoft\Edge\Application\*\Installer\setup.exe" -ErrorAction SilentlyContinue | ForEach-Object {
-              Start-Process $_.FullName -ArgumentList "--uninstall","--system-level","--force-uninstall" -Wait
-          }
-
-          $fastNukePaths = @(
-            "C:\Program Files\Microsoft Visual Studio","C:\Program Files (x86)\Microsoft Visual Studio",
-            "C:\Program Files\Android","C:\Program Files\Java","C:\Program Files\Eclipse Adoptium",
-            "C:\ProgramData\chocolatey\lib","C:\ProgramData\Miniconda3","C:\ProgramData\Anaconda3","C:\msys64",
-            "C:\Program Files\Go","C:\Program Files\Rust","C:\Program Files\Rustup","C:\hostedtoolcache",
-            "C:\Program Files\Google\Chrome","C:\Program Files\Mozilla Firefox","C:\Program Files\Microsoft SQL Server",
-            "C:\Program Files\PostgreSQL","C:\Program Files\MySQL","C:\Program Files\MongoDB",
-            "C:\Program Files\nodejs","C:\Program Files (x86)\nodejs","C:\Program Files\dotnet\sdk",
-            "C:\ProgramData\Docker","C:\Users\runneradmin\.cargo","C:\Users\runneradmin\.rustup",
-            "C:\Users\runneradmin\.gradle","C:\Users\runneradmin\.m2","C:\Users\runneradmin\.nuget",
-            "C:\Users\runneradmin\.dotnet","C:\Users\runneradmin\.android","C:\Users\runneradmin\.vscode",
-            "C:\Users\runneradmin\AppData\Local\Android","C:\Users\runneradmin\AppData\Local\Google",
-            "C:\Users\runneradmin\AppData\Roaming\Code",
-            "C:\Windows\Temp","C:\Windows\Prefetch","C:\Windows\SoftwareDistribution\Download",
-            "C:\Windows\LiveKernelReports","C:\Windows\Minidump","C:\Windows\Panther",
-            "C:\ProgramData\Microsoft\Windows\WER","C:\ProgramData\Microsoft\Windows Defender\Scans",
-            "C:\Windows\Downloaded Program Files","C:\Users\runneradmin\AppData\Local\Temp",
-            "C:\Users\runneradmin\AppData\Local\CrashDumps","C:\Users\Public\Downloads",
-            "C:\Users\Public\Music","C:\Users\Public\Pictures","C:\Users\Public\Videos"
-          )
-          
-          foreach ($path in $fastNukePaths) {
-              if (Test-Path $path) {
-                  cmd.exe /c "rd /s /q `"$path`"" 2>$null | Out-Null
-                  if (Test-Path $path) {
-                      cmd.exe /c "takeown /f `"$path`" /r /d y" 2>$null | Out-Null
-                      cmd.exe /c "icacls `"$path`" /grant administrators:F /t /c /q" 2>$null | Out-Null
-                      cmd.exe /c "rd /s /q `"$path`"" 2>$null | Out-Null
-                  }
-              }
-          }
-
-          $ghostPattern = "Bing|Xbox|OneDrive|Visual Studio|Android|Java|Eclipse|Miniconda|Anaconda|Node.js|Docker|SQL Server|PostgreSQL|MongoDB|Go Programming|Rust|Chrome|Edge|Python|Unity|R for Windows|R 4"
-          
-          $uninstallKeys = @(
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
-            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
-            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
-          )
-          foreach ($key in $uninstallKeys) {
-              Get-ItemProperty $key -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match $ghostPattern } | ForEach-Object {
-                  Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
-              }
-          }
-
-          $appPathsKeys = @(
-              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\*",
-              "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\*"
-          )
-          foreach ($ap in $appPathsKeys) {
-              Get-ItemProperty -Path $ap -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match $ghostPattern } | ForEach-Object { 
-                  Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue 
-              }
-          }
-
-          $regPathsToDelete = @(
-            "HKLM:\SOFTWARE\Google\Chrome", "HKLM:\SOFTWARE\WOW6432Node\Google\Chrome",
-            "HKLM:\SOFTWARE\Google\Update", "HKLM:\SOFTWARE\WOW6432Node\Google\Update",
-            "HKCU:\SOFTWARE\Google\Chrome", "HKCU:\SOFTWARE\Google\Update",
-            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search\RecentApps",
-            "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache"
-          )
-          foreach ($rp in $regPathsToDelete) {
-              if (Test-Path $rp) { Remove-Item -Path $rp -Recurse -Force -ErrorAction SilentlyContinue }
-          }
-
-          $shortcutPaths = @(
-              "C:\ProgramData\Microsoft\Windows\Start Menu\Programs",
-              "C:\Users\runneradmin\AppData\Roaming\Microsoft\Windows\Start Menu\Programs"
-          )
-          foreach ($sp in $shortcutPaths) {
-              Get-ChildItem -Path $sp -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $ghostPattern } | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-          }
-
-          $desktopPaths = @("C:\Users\Public\Desktop", "C:\Users\runneradmin\Desktop")
-          foreach ($dp in $desktopPaths) {
-              if (Test-Path $dp) {
-                  Get-ChildItem -Path $dp -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch 'Firefox|Recycle Bin' } | Remove-Item -Force -ErrorAction SilentlyContinue
-              }
-          }
-
-          Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\ProgramData\Microsoft\Windows\WER\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Prefetch\*" -Recurse -Force -ErrorAction SilentlyContinue
-
-          $servicesToDisable = @(
-            "DiagTrack","dmwappushservice","SysMain","WSearch","XblAuthManager","XblGameSave",
-            "XboxGipSvc","XboxNetApiSvc","WMPNetworkSvc","Fax","RemoteRegistry","RetailDemo",
-            "MapsBroker","WerSvc","Spooler","TabletInputService","TouchKeyboardAndHandwritingPanelService",
-            "PrintNotify","lfsvc","diagnosticshub.standardcollector.service","WbioSrvc","BluetoothUserService",
-            "bthserv","BTAGService","BthAvctpSvc","SEMgrSvc","NfcCxSC","SmsRouter","SensorService",
-            "SensrSvc","SensorDataService","WalletService","AssignedAccessManagerSvc","GraphicsPerfSvc",
-            "MessagingService","AJRouter","SNMPTRAP","WpcMonSvc","wisvc","DoSvc","wuauserv","UsoSvc",
-            "WaaSMedicSvc","PhoneSvc","TapiSrv","SCardSvr","ScDeviceEnum","EntAppSvc","WorkFolders",
-            "DusmSvc","FrameServer","RmSvc","CscService","PrintWorkflowUserSvc","PrintDeviceConfigurationService",
-            "WiaRpc","stisvc","HvHost","vmicvss","vmicheartbeat","vmickvpexchange","vmicrdv",
-            "vmicshutdown","vmictimesync","vmicvmsession","WManSvc","NcaSvc"
-          )
-          foreach ($svc in $servicesToDisable) {
-              Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-              Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
-              sc.exe config $svc start= disabled 2>$null | Out-Null
-              $global:LASTEXITCODE = 0
-          }
-
-          reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Features" /v "TamperProtection" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Services\WinDefend" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Services\WdNisSvc" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Services\Sense" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Services\MsSense" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Services\SecurityHealthService" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Services\wscsvc" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Services\MpDefenderCoreService" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Services\WdFilter" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
-
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338389Enabled" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SoftLandingEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SystemPaneSuggestionsEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SilentInstalledAppsEnabled" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" /v "AllowTelemetry" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Services\SgrmBroker" /v "Start" /t REG_DWORD /d 4 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "LargeSystemCache" /t REG_DWORD /d 1 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "DisablePagingExecutive" /t REG_DWORD /d 1 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" /v "EnablePrefetcher" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" /v "EnableSuperfetch" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v "EnableLUA" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v "NoAutoUpdate" /t REG_DWORD /d 1 /f >$null 2>&1
-          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\VisualFXSetting" /v "VisualFXSetting" /t REG_DWORD /d 2 /f >$null 2>&1
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v "fDenyTSConnections" /t REG_DWORD /d 0 /f >$null 2>&1
-          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v "DisableAntiSpyware" /t REG_DWORD /d 1 /f >$null 2>&1
-          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" /v "DisableRealtimeMonitoring" /t REG_DWORD /d 1 /f >$null 2>&1
-
-          $tasksToDisable = @(
-            "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
-            "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
-            "\Microsoft\Windows\Application Experience\StartupAppTask",
-            "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
-            "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip",
-            "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector",
-            "\Microsoft\Windows\Feedback\Siuf\DmClient",
-            "\Microsoft\Windows\Windows Error Reporting\QueueReporting",
-            "\Microsoft\Windows\Autochk\Proxy",
-            "\Microsoft\Windows\DiskFootprint\Diagnostics",
-            "\Microsoft\Windows\Maintenance\WinSAT",
-            "\Microsoft\Windows\PI\Sqm-Tasks",
-            "\Microsoft\Windows\Registry\RegIdleBackup",
-            "\Microsoft\Windows\Sysmain\HybridDriveCachePrepopulate",
-            "\Microsoft\Windows\Sysmain\HybridDriveCacheRebalance",
-            "\Microsoft\Windows\Time Synchronization\SynchronizeTime",
-            "\Microsoft\Windows\UPnP\UPnPHostConfig",
-            "\Microsoft\Windows\WDI\ResolutionHost",
-            "\Microsoft\Windows\Workplace Join\Automatic-Device-Join",
-            "\Microsoft\Windows\Defrag\ScheduledDefrag",
-            "\Microsoft\Windows\Diagnosis\Scheduled"
-          )
-          foreach ($task in $tasksToDisable) { schtasks /Change /TN $task /Disable 2>$null | Out-Null }
-          $global:LASTEXITCODE = 0
-
-          powercfg -h off 2>$null | Out-Null
-          powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null | Out-Null
-          
-          Write-Host "Arka planda DISM derin temizligi baslatildi (RDP'yi engellemez)..." -ForegroundColor Yellow
-          Start-Process -FilePath "Dism.exe" -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup /Quiet" -NoNewWindow
-          
-          wevtutil el 2>$null | ForEach-Object { wevtutil cl "$_" 2>$null | Out-Null }
-          $global:LASTEXITCODE = 0
-
-      - name: Repair Critical Services
-        run: |
-          $keepSvc = @(
-              "TermService","UmRdpService","SessionEnv","RemoteAccess",
-              "mpssvc","BFE","WinRM","RpcLocator","TrustedInstaller",
-              "RpcSs","DcomLaunch","RpcEptMapper","nsi","Dnscache","netprofm","NlaSvc",
-              "iphlpsvc","WinHttpAutoProxySvc","Dhcp","LanmanServer","LanmanWorkstation",
-              "Tailscale","UserDataSvc","UnistoreSvc","UserManager","TokenBroker",
-              "ClipSVC","LicenseManager","InstallService","AppXSvc","StateRepository",
-              "ShellHWDetection","Themes","FontCache","Audiosrv","AudioEndpointBuilder",
-              "BrokerInfrastructure","SystemEventsBroker","EventLog","EventSystem","Schedule",
-              "ProfSvc","gpsvc","Winmgmt","DPS","WdiServiceHost","WdiSystemHost",
-              "CryptSvc","KeyIso","SamSs"
-          )
-          foreach ($svc in $keepSvc) {
-              Set-Service -Name $svc -StartupType Automatic -ErrorAction SilentlyContinue
-              Start-Service -Name $svc -ErrorAction SilentlyContinue
-          }
-          Start-Sleep 3
-          Stop-Service Tailscale -Force -ErrorAction SilentlyContinue
-          Start-Sleep 2
-          Set-Service Tailscale -StartupType Automatic -ErrorAction SilentlyContinue
-          Start-Service Tailscale -ErrorAction SilentlyContinue
-          Start-Sleep 5
-          $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
-          $tsIP = $null; $r = 0
-          while (-not $tsIP -and $r -lt 20) { $tsIP = & $tsExe ip -4 2>$null; if (-not $tsIP) { Start-Sleep 3 }; $r++ }
-          if (-not $tsIP) { Write-Error "Tailscale could not be brought back"; exit 1 }
-          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+          Write-Host "[+] Islemci (CPU) : $($cpu.Name)"
+          Write-Host "[+] RAM Miktari   : $ram GB"
+          Write-Host "[+] C: Surucusu   : $freeGB GB Bos / $totalGB GB Toplam"
+          Write-Host "=================================================="
+          Write-Host "ISLEMLER BASLATILIYOR..."
           exit 0
 
-      - name: Memory Optimization
+      - name: Tailscale'i Başlat
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Kullanıcı Oluştur, Full Admin Yap ve RDP'yi Etkinleştir
         run: |
-          $procToKill = @(
-            "SearchIndexer","SearchProtocolHost","SearchFilterHost","SecurityHealthSystray",
-            "SecurityHealthService","MpCmdRun","MpDefenderCoreService","smartscreen",
-            "Widgets","WidgetService","PhoneExperienceHost","YourPhone","CrossDeviceService",
-            "OneDrive","RuntimeBroker","ShellExperienceHost","StartMenuExperienceHost",
-            "SearchApp","ApplicationFrameHost","SystemSettings","TextInputHost","ctfmon","dwm"
-          )
-          foreach ($proc in $procToKill) { Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue }
-          
-          $svcToStop = @("WinDefend","WdNisSvc","Sense","MsSense","SecurityHealthService","wscsvc","MpDefenderCoreService","SgrmBroker","WdFilter","WdNisDrv","WdBoot","WSearch","SysMain","WerSvc","DiagTrack","dmwappushservice","BITS","MapsBroker","RetailDemo","DusmSvc","FrameServer")
-          foreach ($svc in $svcToStop) {
-              sc.exe stop $svc 2>$null | Out-Null
-              sc.exe config $svc start= disabled 2>$null | Out-Null
-              $global:LASTEXITCODE = 0
-          }
-          
-          $cs = 'using System;using System.Runtime.InteropServices;public class M{[DllImport("psapi.dll")]public static extern bool EmptyWorkingSet(IntPtr h);[DllImport("kernel32.dll")]public static extern IntPtr OpenProcess(int a,bool i,int p);[DllImport("kernel32.dll")]public static extern bool CloseHandle(IntPtr h);}'
-          try {
-              Add-Type -TypeDefinition $cs -ErrorAction Stop
-              Get-Process -ErrorAction SilentlyContinue | ForEach-Object {
-                  try {
-                      $h = [M]::OpenProcess(0x1F0FFF, $false, $_.Id)
-                      if ($h -ne [IntPtr]::Zero) {
-                          [M]::EmptyWorkingSet($h) | Out-Null
-                          [M]::CloseHandle($h) | Out-Null
-                      }
-                  } catch {}
-              }
-          } catch {}
-          [System.GC]::Collect()
-          [System.GC]::WaitForPendingFinalizers()
-          [System.GC]::Collect()
-          Start-Sleep 5
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          $Password = ConvertTo-SecureString -AsPlainText "${{ secrets.ERROR_4004_PASSWORD }}" -Force
+          if (-not (Get-LocalUser -Name "ERROR-4004" -ErrorAction SilentlyContinue)) {
+            New-LocalUser -Name "ERROR-4004" -Password $Password -PasswordNeverExpires -AccountNeverExpires
+          } else { Set-LocalUser -Name "ERROR-4004" -Password $Password }
+          Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004" -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
           exit 0
 
-      - name: Install Firefox
+      - name: Dosya Kilitlerini Aç (Servisleri Durdur)
         run: |
-          $ErrorActionPreference = 'Continue'
-          $url = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US"
-          $installerPath = "$env:TEMP\firefox_installer.exe"
-          try {
-              Invoke-WebRequest -Uri $url -OutFile $installerPath -UseBasicParsing -ErrorAction Stop
-          } catch {
-              exit 1
+          Write-Host "Dosyalari kilitleyen arka plan servisleri durduruluyor..."
+          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv")
+          foreach ($svc in $killerServices) {
+            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
           }
-          Start-Process -FilePath $installerPath -ArgumentList "-ms" -Wait
-          Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
           exit 0
 
-      - name: Verify RDP Accessibility
+      # ==========================================
+      # 5 DAKİKA ALTINA İNEN SİLME MOTORU
+      # ==========================================
+      - name: HYPERSPEED SİLME (DISM İptal, Sahiplik Al ve Sil)
         run: |
-          $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
-          $tsIP = & $tsExe ip -4
-          if (-not $tsIP) { Write-Error "Tailscale IP missing"; exit 1 }
-          $r = Test-NetConnection -ComputerName $tsIP -Port 3389
-          if (-not $r.TcpTestSucceeded) { Write-Error "RDP port unreachable"; exit 1 }
+          Write-Host "Hyperspeed silme baslatildi. (DISM iptal edildi, sahiplik aliniyor...)"
+          
+          # 1. Tüm devasa klasörleri tek bir .bat dosyasina yaz
+          $batContent = @"
+          @echo off
+          rd /s /q "C:\hostedtoolcache"
+          rd /s /q "C:\Program Files\Microsoft Visual Studio"
+          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
+          rd /s /q "C:\Program Files\Docker"
+          rd /s /q "C:\ProgramData\Docker"
+          rd /s /q "C:\Program Files\Microsoft SQL Server"
+          rd /s /q "C:\Program Files\Android"
+          rd /s /q "C:\Program Files\Java"
+          rd /s /q "C:\Program Files\nodejs"
+          rd /s /q "C:\Program Files\dotnet"
+          rd /s /q "C:\ProgramData\chocolatey"
+          rd /s /q "C:\Program Files\Microsoft SDKs"
+          rd /s /q "C:\Program Files (x86)\Microsoft SDKs"
+          rd /s /q "C:\Program Files (x86)\Windows Kits"
+          rd /s /q "C:\Program Files\Azure"
+          rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
+          rd /s /q "C:\Users\runneradmin\.nuget"
+          rd /s /q "C:\Users\runneradmin\.m2"
+          rd /s /q "C:\Users\runneradmin\.gradle"
+          rd /s /q "C:\Users\runneradmin\.android"
+          rd /s /q "C:\Windows\System32\LogFiles"
+          rd /s /q "C:\Windows\Temp"
+          rd /s /q "C:\Windows\SoftwareDistribution"
+          rd /s /q "C:\`$Recycle.Bin"
+          "@
+          Set-Content -Path "C:\hyperspeed_delete.bat" -Value $batContent
+          
+          # 2. "Access Denied" hatalarını önlemek için kritik klasörlerin sahipliğini al
+          takeown /f "C:\Program Files\Microsoft SDKs" /r /d y > $null 2>&1
+          icacls "C:\Program Files\Microsoft SDKs" /grant administrators:F /t > $null 2>&1
+          takeown /f "C:\Windows\System32\LogFiles" /r /d y > $null 2>&1
+          icacls "C:\Windows\System32\LogFiles" /grant administrators:F /t > $null 2>&1
+          
+          # 3. Batch dosyasini çalıştır (Milisaniyeler içinde siler)
+          cmd.exe /c "C:\hyperspeed_delete.bat"
+          Remove-Item -Path "C:\hyperspeed_delete.bat" -Force -ErrorAction SilentlyContinue
+          
+          # 4. DISM yerine WinSxS\Backup klasörünü doğrudan sil (Işık hızında)
+          Write-Host "WinSxS Backup dogrudan siliniyor..."
+          takeown /f "C:\Windows\WinSxS\Backup" /r /d y > $null 2>&1
+          icacls "C:\Windows\WinSxS\Backup" /grant administrators:F /t > $null 2>&1
+          cmd.exe /c "rd /s /q C:\Windows\WinSxS\Backup" > $null 2>&1
+          
+          # Windows Event Loglarini temizle
+          wevtutil el | Foreach-Object {wevtutil cl "$_"} 2>$null
+          
+          exit 0
 
-      - name: Maintain Connection
+      - name: HAYALET UYGULAMALARI VE KAYIT DEFTERİNİ SİL
         run: |
-          $tsExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
-          $tsIP = & $tsExe ip -4
-          Write-Host "Address: $tsIP"
-          Write-Host "Username: ERROR-4004"
-          Write-Host "Password: Password!?"
-          while ($true) {
-              Write-Host "[$(Get-Date)] RDP Active"
-              Start-Sleep -Seconds 300
+          cmd.exe /c "rd /s /q C:\Users\Public\Desktop" > $null 2>&1
+          cmd.exe /c "rd /s /q C:\Users\runneradmin\Desktop" > $null 2>&1
+          cmd.exe /c "rd /s /q C:\Users\ERROR-4004\Desktop" > $null 2>&1
+          New-Item -ItemType Directory -Force -Path "C:\Users\Public\Desktop" | Out-Null
+          New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
+
+          $uninstallPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*")
+          foreach ($path in $uninstallPaths) {
+            Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match "Edge|Chrome|Python|Unity|Visual Studio" } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
           }
+          exit 0
+
+      - name: SANAL BELLEK (PAGEFILE) VE TEMP TEMİZLİĞİ
+        run: |
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force
+          powercfg -h off
+          vssadmin delete shadows /all /quiet
+          
+          cmd.exe /c "rd /s /q C:\Windows\Temp" > $null 2>&1
+          cmd.exe /c "rd /s /q C:\Windows\Prefetch" > $null 2>&1
+          cmd.exe /c "rd /s /q C:\Windows\Installer" > $null 2>&1
+          cmd.exe /c "rd /s /q C:\ProgramData\Package Cache" > $null 2>&1
+          
+          New-Item -ItemType Directory -Force -Path "C:\Windows\Temp" | Out-Null
+          New-Item -ItemType Directory -Force -Path "C:\Windows\Prefetch" | Out-Null
+          exit 0
+
+      - name: Firefox'u Kur ve Masaüstüne At
+        run: |
+          $firefoxUrl = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US"
+          Invoke-WebRequest -Uri $firefoxUrl -OutFile "$env:TEMP\firefox_installer.exe"
+          Start-Process -FilePath "$env:TEMP\firefox_installer.exe" -ArgumentList "/S" -Wait
+          $WshShell = New-Object -ComObject WScript.Shell
+          $Shortcut1 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Firefox.lnk")
+          $Shortcut1.TargetPath = "C:\Program Files\Mozilla Firefox\firefox.exe"
+          $Shortcut1.Save()
+          $Shortcut2 = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Firefox.lnk")
+          $Shortcut2.TargetPath = "C:\Program Files\Mozilla Firefox\firefox.exe"
+          $Shortcut2.Save()
+          exit 0
+
+      - name: Servisleri Kapat ve FULL PERFORMANS
+        run: |
+          $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc")
+          foreach ($svc in $services) { Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue; Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue }
+          powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
+          ipconfig /flushdns
+          exit 0
+
+      - name: Bağlantı Bilgilerini Göster
+        run: |
+          Write-Host "===================================="
+          Write-Host "     ERROR-4004 HYPERSPEED TEMİZLİK "
+          Write-Host "===================================="
+          Write-Host "Tailscale IP:"
+          tailscale ip -4
+          Write-Host "Kullanici Adi : ERROR-4004"
+          Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
+          Write-Host "===================================="
+          $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
+          Write-Host "C: SURUCUSUNDEKI GUNCEL BOS ALAN: $([math]::Round($disk.FreeSpace/1GB,2)) GB"
+          exit 0
+          
+      - name: Sistemi 60 Saat Boyunca Açık Tut
+        run: |
+          Write-Host "Islem tamam. 60 saat uyku basliyor..."
+          Start-Sleep -Seconds 216000 
