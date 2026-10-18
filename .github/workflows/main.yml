@@ -65,10 +65,20 @@ jobs:
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
           exit 0
 
-      - name: Dosya Kilitlerini Aç (EventLog Dahil)
+      # ==========================================
+      # DOSYALARI KİLİTLEYEN SÜREÇLERİ ZORLA KAPAT
+      # ==========================================
+      - name: Dosya Kilitlerini Aç (Süreçleri ve Servisleri Öldür)
         run: |
-          Write-Host "Dosyalari kilitleyen arka plan servisleri durduruluyor..."
-          # EventLog (Windows Olay Günlüğü) servisini de listeye ekledik ki log dosyalarini kilitlmesin
+          Write-Host "Kilitli dosyalari tutan süreçler zorla kapatiliyor..."
+          
+          # 1. Visual Studio ve SDK'lari kilitleyen süreçleri zorla sonlandir
+          $processes = Get-Process | Where-Object { $_.Path -match "Visual Studio|Microsoft SDKs|ServiceFabric|dotnet|java|node|docker|Unity|VBCSCompiler" }
+          foreach ($p in $processes) {
+              Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
+          
+          # 2. Log ve dosya kilitlerini tutan servisleri durdur
           $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog")
           foreach ($svc in $killerServices) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
@@ -77,14 +87,12 @@ jobs:
           exit 0
 
       # ==========================================
-      # SÜREYİ 1-2 DAKİKAYA İNDİREN SİLME MOTORU
+      # HEDEF: 90 GB (Takeown İptal, Direkt Sil)
       # ==========================================
-      - name: HYPERSPEED SİLME (Sistem Logları Hariç)
+      - name: HYPERSPEED SİLME (Hedef 90 GB)
         run: |
-          Write-Host "Hyperspeed silme baslatildi. Sistem dosyalari atlaniyor, sadece devasa çöp siliniyor..."
+          Write-Host "Hyperspeed silme baslatildi..."
           
-          # System32\LogFiles ve winevt\Logs listesini ÇIKARDIK. 
-          # Çünkü onlar kilitli ve silinmeye çalışıldığında 10 dakika zaman kaybettiriyor.
           $batContent = @"
           @echo off
           rd /s /q "C:\hostedtoolcache"
@@ -110,6 +118,9 @@ jobs:
           rd /s /q "C:\Windows\Temp"
           rd /s /q "C:\Windows\SoftwareDistribution"
           rd /s /q "C:\`$Recycle.Bin"
+          rd /s /q "C:\Windows\Prefetch"
+          rd /s /q "C:\Windows\Installer"
+          rd /s /q "C:\ProgramData\Package Cache"
           "@
           Set-Content -Path "C:\hyperspeed_delete.bat" -Value $batContent
           
