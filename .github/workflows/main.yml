@@ -29,12 +29,11 @@ jobs:
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
           
-          # Disk Türünü Tespit Et
           try {
               $disk = Get-PhysicalDisk -ErrorAction Stop | Select-Object -First 1
               $mediaType = $disk.MediaType
           } catch {
-              $mediaType = "SSD" # Varsayılan olarak SSD kabul et
+              $mediaType = "SSD"
           }
           Write-Host "[+] Disk Tipi       : $mediaType"
           
@@ -93,7 +92,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. SADECE ROBCOPY KULLANAN MOTOR (Hedef 85+ GB)
+      # 3. PARALEL ROBLINUX MOTORU (Hedef 85+ GB)
       # ==========================================
       - name: HYPERSPEED SİLME (Hedef 85+ GB)
         run: |
@@ -102,37 +101,60 @@ jobs:
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # Yavaş silen rd /s /q komutları tamamen çöpe atıldı.
-          # Sadece devasa boyutlu ve robocopy ile anında silinenler bırakıldı.
-          $batContent = @"
-          @echo off
-          robocopy C:\empty_dir "C:\hostedtoolcache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\Program Files\Microsoft SQL Server" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\Program Files\Android" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\Program Files\Git" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\Program Files\Docker" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\ProgramData\Package Cache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\Windows\SoftwareDistribution" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\Program Files\Google" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft\Edge" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\Users\runneradmin\.nuget" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\Users\runneradmin\.m2" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\Users\runneradmin\.gradle" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          robocopy C:\empty_dir "C:\ProgramData\Microsoft\Network\Downloader" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          # 4 PARALEL İŞLEM BAŞLATIYORUZ. Aynı anda 4 farklı yeri silecekler.
           
-          :: Hata versek bile devam etmesi icin
-          exit /b 0
-          "@
-          Set-Content -Path "C:\fast_delete.bat" -Value $batContent
+          # 1. İşlem: hostedtoolcache ve Visual Studio (En ağırlar)
+          $job1 = Start-Job -ScriptBlock {
+            param($mt)
+            robocopy C:\empty_dir "C:\hostedtoolcache" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+            robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+            robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          } -ArgumentList $mtParam
+
+          # 2. İşlem: Diller, Veritabanları (Sadece ana klasörler)
+          $job2 = Start-Job -ScriptBlock {
+            param($mt)
+            robocopy C:\empty_dir "C:\Program Files\Microsoft SQL Server" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+            robocopy C:\empty_dir "C:\Program Files\Android" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+            robocopy C:\empty_dir "C:\Program Files\Git" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+            robocopy C:\empty_dir "C:\Program Files\Docker" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          } -ArgumentList $mtParam
+
+          # 3. İşlem: Önbellekler ve Çöpler
+          $job3 = Start-Job -ScriptBlock {
+            param($mt)
+            robocopy C:\empty_dir "C:\ProgramData\Package Cache" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+            robocopy C:\empty_dir "C:\Windows\SoftwareDistribution" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+            robocopy C:\empty_dir "C:\Program Files\Google" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+            robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft\Edge" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          } -ArgumentList $mtParam
+
+          # 4. İşlem: Kullanıcı Önbellekleri
+          $job4 = Start-Job -ScriptBlock {
+            param($mt)
+            robocopy C:\empty_dir "C:\Users\runneradmin\.nuget" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+            robocopy C:\empty_dir "C:\Users\runneradmin\.m2" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+            robocopy C:\empty_dir "C:\Users\runneradmin\.gradle" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+            robocopy C:\empty_dir "C:\ProgramData\Microsoft\Network\Downloader" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          } -ArgumentList $mtParam
           
-          # -Wait ile işlemin tamamen kendi kendine bitmesini bekliyoruz. ZORLA KAPATMA YOK.
-          Write-Host "Silme islemleri yapiliyor. Sadece Robocopy kullanildigi icin cok hizli bitecek..."
-          Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -Wait
+          # 4 işlemin bitmesini bekle (Zaman aşımı YOK). Paralel oldukları için hızlı bitecek.
+          Write-Host "Silme islemleri paralel olarak yapiliyor..."
+          Wait-Job $job1, $job2, $job3, $job4 | Out-Null
+          
+          # İşlemleri temizle
+          Remove-Job $job1, $job2, $job3, $job4 -Force -ErrorAction SilentlyContinue
+          
+          # Kalan boş klasörleri sil (rd ile)
+          $dirsToRemove = @(
+            "C:\hostedtoolcache", "C:\Program Files\Microsoft Visual Studio", "C:\Program Files (x86)\Microsoft Visual Studio",
+            "C:\Program Files\Microsoft SQL Server", "C:\Program Files\Android", "C:\Program Files\Git", "C:\Program Files\Docker",
+            "C:\ProgramData\Package Cache", "C:\Windows\SoftwareDistribution", "C:\Program Files\Google", "C:\Program Files (x86)\Microsoft\Edge",
+            "C:\Users\runneradmin\.nuget", "C:\Users\runneradmin\.m2", "C:\Users\runneradmin\.gradle", "C:\ProgramData\Microsoft\Network\Downloader"
+          )
+          foreach ($dir in $dirsToRemove) { cmd.exe /c "rd /s /q `"$dir`"" > $null 2>&1 }
           
           # Temizlik
-          Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
