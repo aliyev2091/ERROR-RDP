@@ -73,11 +73,9 @@ jobs:
         run: |
           Write-Host "Kilitli dosyalari tutan süreçler ve servisler zorla kapatiliyor..."
           
-          # Hata veren dosyalari kilitleyen GitHub ajanini ve Windows indirme servislerini durdur
           cmd.exe /c "taskkill /F /IM provjobd.exe /T" > $null 2>&1
           cmd.exe /c "net stop bits /y" > $null 2>&1
           cmd.exe /c "net stop dosvc /y" > $null 2>&1
-          
           cmd.exe /c "taskkill /F /IM msiexec.exe /T" > $null 2>&1
           cmd.exe /c "taskkill /F /IM ServiceFabricLocalClusterManager.exe /T" > $null 2>&1
           cmd.exe /c "taskkill /F /IM VBCSCompiler.exe /T" > $null 2>&1
@@ -100,13 +98,16 @@ jobs:
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
+          # DİKKAT: Tüm rd /s /q komutlarının sonuna "> nul 2>&1" eklendi.
+          # Bu sayede silinemeyen dosyalar için Windows'un ürettiği "Access is denied" hataları loglara yansımayacak, işlem sessizce devam edecek.
+
           # CMD 1: hostedtoolcache
           $bat1 = @"
           @echo off
           takeown /f "C:\hostedtoolcache" /r /d y > nul 2>&1
           icacls "C:\hostedtoolcache" /grant administrators:F /t > nul 2>&1
           robocopy C:\empty_dir "C:\hostedtoolcache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\hostedtoolcache"
+          rd /s /q "C:\hostedtoolcache" > nul 2>&1
           exit /b 0
           "@
           Set-Content -Path "C:\del1.bat" -Value $bat1
@@ -117,15 +118,15 @@ jobs:
           takeown /f "C:\Program Files\Microsoft Visual Studio" /r /d y > nul 2>&1
           icacls "C:\Program Files\Microsoft Visual Studio" /grant administrators:F /t > nul 2>&1
           robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files\Microsoft Visual Studio"
+          rd /s /q "C:\Program Files\Microsoft Visual Studio" > nul 2>&1
           robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
-          rd /s /q "C:\Program Files\Android"
-          rd /s /q "C:\Program Files\Git"
-          rd /s /q "C:\Program Files\Docker"
-          rd /s /q "C:\Program Files\Java"
-          rd /s /q "C:\Program Files\nodejs"
-          rd /s /q "C:\Program Files\dotnet"
+          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio" > nul 2>&1
+          rd /s /q "C:\Program Files\Android" > nul 2>&1
+          rd /s /q "C:\Program Files\Git" > nul 2>&1
+          rd /s /q "C:\Program Files\Docker" > nul 2>&1
+          rd /s /q "C:\Program Files\Java" > nul 2>&1
+          rd /s /q "C:\Program Files\nodejs" > nul 2>&1
+          rd /s /q "C:\Program Files\dotnet" > nul 2>&1
           exit /b 0
           "@
           Set-Content -Path "C:\del2.bat" -Value $bat2
@@ -133,28 +134,28 @@ jobs:
           # CMD 3: Veritabanları, Önbellekler ve Update
           $bat3 = @"
           @echo off
-          rd /s /q "C:\Program Files\Microsoft SQL Server"
-          rd /s /q "C:\Program Files\PostgreSQL"
-          rd /s /q "C:\Program Files\MySQL"
-          rd /s /q "C:\ProgramData\Package Cache"
-          rd /s /q "C:\Windows\SoftwareDistribution"
-          rd /s /q "C:\Program Files\Google"
-          rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
+          rd /s /q "C:\Program Files\Microsoft SQL Server" > nul 2>&1
+          rd /s /q "C:\Program Files\PostgreSQL" > nul 2>&1
+          rd /s /q "C:\Program Files\MySQL" > nul 2>&1
+          rd /s /q "C:\ProgramData\Package Cache" > nul 2>&1
+          rd /s /q "C:\Windows\SoftwareDistribution" > nul 2>&1
+          rd /s /q "C:\Program Files\Google" > nul 2>&1
+          rd /s /q "C:\Program Files (x86)\Microsoft\Edge" > nul 2>&1
           exit /b 0
           "@
           Set-Content -Path "C:\del3.bat" -Value $bat3
 
-          # CMD 4: Temp ve Kullanıcı Çöpleri (Hata veren Downloader dahil)
+          # CMD 4: Temp ve Kullanıcı Çöpleri (provjobd hatası gizlendi)
           $bat4 = @"
           @echo off
-          rd /s /q "C:\Windows\Temp"
-          rd /s /q "C:\Windows\Prefetch"
-          rd /s /q "C:\Users\runneradmin\.nuget"
-          rd /s /q "C:\Users\runneradmin\.m2"
-          rd /s /q "C:\Users\runneradmin\.gradle"
-          rd /s /q "C:\Users\runneradmin\.android"
-          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp"
-          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader"
+          rd /s /q "C:\Windows\Temp" > nul 2>&1
+          rd /s /q "C:\Windows\Prefetch" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\.nuget" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\.m2" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\.gradle" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\.android" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp" > nul 2>&1
+          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader" > nul 2>&1
           exit /b 0
           "@
           Set-Content -Path "C:\del4.bat" -Value $bat4
@@ -170,7 +171,7 @@ jobs:
           Write-Host "Silme islemleri yapiliyor. Maksimum 5 dakika bekleniyor..."
           Start-Sleep -Seconds 300
           
-          # 5 dakika sonunda hala calisan varsa zorla kapat (Süre 6-7 dk'yı geçmesin)
+          # 5 dakika sonunda hala calisan varsa zorla kapat
           Stop-Process -Id $p1.Id -Force -ErrorAction SilentlyContinue
           Stop-Process -Id $p2.Id -Force -ErrorAction SilentlyContinue
           Stop-Process -Id $p3.Id -Force -ErrorAction SilentlyContinue
