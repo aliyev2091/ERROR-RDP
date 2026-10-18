@@ -29,13 +29,8 @@ jobs:
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
           
-          # Disk Türünü Güvenli Tespit Et
-          try {
-              $disk = Get-PhysicalDisk -ErrorAction Stop | Select-Object -First 1
-              $mediaType = $disk.MediaType
-          } catch {
-              $mediaType = "Unspecified"
-          }
+          $disk = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object -First 1
+          $mediaType = if ($disk) { $disk.MediaType } else { "SSD" } # Varsayılan SSD
           Write-Host "[+] Disk Tipi       : $mediaType"
           
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
@@ -46,8 +41,7 @@ jobs:
           Write-Host "================================================================="
           Write-Host "Hyperspeed temizlik baslatiliyor..."
           
-          # Disk tipine göre değişkeni ayarla
-          if ($mediaType -eq "SSD") {
+          if ($mediaType -eq "SSD" -or $mediaType -eq "Unspecified") {
             echo "DISK_TYPE=SSD" >> $env:GITHUB_ENV
           } else {
             echo "DISK_TYPE=HDD" >> $env:GITHUB_ENV
@@ -94,16 +88,16 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. SSD/HDD OPTİMİZE TEMİZLİK MOTORU
+      # 3. SSD/HDD OPTİMİZE TEMİZLİK MOTORU (Zaman Kaybettirenler Çıkarıldı)
       # ==========================================
       - name: HYPERSPEED SİLME (Hedef 85+ GB)
         run: |
-          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:1" }
+          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:16" } # HDD için 16 ideal
           Write-Host "Silme islemleri baslatiliyor. Tespit edilen disk: $env:DISK_TYPE (Robocopy Parametresi: $mtParam)"
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # Disk tipine göre Multithreading parametresi ($mtParam) değişiyor
+          # DİKKAT: Windows\Panther, Logs ve AppData\Local\Temp gibi kilitli ve yavaşlatan dosyalar çıkarıldı.
           $batContent = @"
           @echo off
           robocopy C:\empty_dir "C:\hostedtoolcache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
@@ -157,24 +151,20 @@ jobs:
           rd /s /q "C:\ProgramData\chocolatey"
           rd /s /q "C:\Windows\Temp"
           rd /s /q "C:\Windows\Prefetch"
-          rd /s /q "C:\Windows\Panther"
-          rd /s /q "C:\Windows\Logs"
           rd /s /q "C:\Users\runneradmin\.nuget"
           rd /s /q "C:\Users\runneradmin\.m2"
           rd /s /q "C:\Users\runneradmin\.gradle"
           rd /s /q "C:\Users\runneradmin\.android"
-          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp"
           rd /s /q "C:\ProgramData\Microsoft\Network\Downloader"
           rd /s /q "C:\ProgramData\Microsoft\Windows\WER"
           exit /b 0
           "@
           Set-Content -Path "C:\fast_delete.bat" -Value $batContent
           
-          # Zorla kapatma yok. Robocopy disk tipine göre hızlıca bitirecek.
-          Write-Host "Silme islemleri yapiliyor. Robocopy kullanildigi icin hizli bitecek..."
+          # Zorla kapatma YOK. Kilitli dosyalar listeden çıktığı için çok hızlı bitecek.
+          Write-Host "Silme islemleri yapiliyor. Kilitli dosyalar atlandigi icin hizli bitecek..."
           Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -Wait
           
-          # Temizlik
           Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           
