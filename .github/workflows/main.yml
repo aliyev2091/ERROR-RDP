@@ -10,7 +10,7 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. DETAYLI SİSTEM BİLGİLERİ VE DİSK TÜRÜ TESPİTİ
+      # 1. DETAYLI SİSTEM BİLGİLERİ VE KESİN DİSK TESPİTİ
       # ==========================================
       - name: DETAYLI SISTEM DONANIM BILGILERI
         id: sys_info
@@ -29,7 +29,7 @@ jobs:
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
           
-          # DİSK TESPİTİ (Gelişmiş WMI Yöntemi)
+          # DİSK TESPİTİ (Kesin WMI Yöntemi)
           $mediaType = "SSD"
           try {
               $diskInfo = Get-CimInstance -ClassName Win32_DiskDrive | Where-Object { $_.Index -eq 0 }
@@ -49,13 +49,7 @@ jobs:
           Write-Host "-----------------------------------------------------------------"
           Write-Host "[+] C: Surucusu     : $freeGB GB Bos / $totalGB GB Toplam"
           Write-Host "================================================================="
-          Write-Host "Hyperspeed temizlik baslatiliyor..."
-          
-          if ($mediaType -eq "HDD") {
-            echo "DISK_TYPE=HDD" >> $env:GITHUB_ENV
-          } else {
-            echo "DISK_TYPE=SSD" >> $env:GITHUB_ENV
-          }
+          Write-Host "Cekirdek temizlik baslatiliyor..."
           exit 0
 
       - name: Tailscale'i Başlat
@@ -98,81 +92,58 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. SORUNSUZ VE HIZLI SİLME MOTORU (Sistem Dosyaları Hariç)
+      # 3. .NET ÇEKİRDEK MOTORU (Zaman Sınırı Yok, Zorla Kapatma Yok)
       # ==========================================
-      - name: HYPERSPEED SİLME (Sorunsuz Temizlik)
+      - name: HYPERSPEED SİLME (Hedef Maksimum Temizlik)
         run: |
-          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:8" }
-          Write-Host "Silme islemleri baslatiliyor. Tespit edilen disk: $env:DISK_TYPE (Robocopy Parametresi: $mtParam)"
+          Write-Host "Silme islemleri .NET Cekirdek Motoru ile baslatiliyor..."
           
-          New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
-          
-          # KİLİTLENEN VE SÜREYİ UZATAN SİSTEM DOSYALARI (WinSxS, Installer, Panther vb.) LİSTEDEN ÇIKARILDI.
-          # Sadece kesin silinen ve devasa yer kaplayan programlar bırakıldı.
-          $batContent = @"
-          @echo off
-          
-          :: 1. Hostedtoolcache ve Visual Studio (En Büyük Çöp)
-          robocopy C:\empty_dir "C:\hostedtoolcache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\hostedtoolcache"
-          robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files\Microsoft Visual Studio"
-          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
-          
-          :: 2. Veritabanları ve Diller
-          robocopy C:\empty_dir "C:\Program Files\Microsoft SQL Server" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files\Microsoft SQL Server"
-          robocopy C:\empty_dir "C:\Program Files\Android" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files\Android"
-          robocopy C:\empty_dir "C:\Program Files\Git" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files\Git"
-          robocopy C:\empty_dir "C:\Program Files\Docker" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files\Docker"
-          
-          :: 3. Önbellekler ve Tarayıcılar
-          robocopy C:\empty_dir "C:\ProgramData\Package Cache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\ProgramData\Package Cache"
-          robocopy C:\empty_dir "C:\Windows\SoftwareDistribution" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Windows\SoftwareDistribution"
-          robocopy C:\empty_dir "C:\Program Files\Google" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files\Google"
-          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft\Edge" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
-          
-          :: 4. Diğer Araçlar ve Önbellekler
-          rd /s /q "C:\Program Files\PostgreSQL"
-          rd /s /q "C:\Program Files\MySQL"
-          rd /s /q "C:\Program Files\R"
-          rd /s /q "C:\Program Files\Rtools"
-          rd /s /q "C:\Program Files\nodejs"
-          rd /s /q "C:\Program Files\dotnet"
-          rd /s /q "C:\Program Files\Java"
-          rd /s /q "C:\Program Files\Azure"
-          rd /s /q "C:\ProgramData\Docker"
-          rd /s /q "C:\ProgramData\chocolatey"
-          rd /s /q "C:\Windows\Temp"
-          rd /s /q "C:\Windows\Prefetch"
-          rd /s /q "C:\Users\runneradmin\.nuget"
-          rd /s /q "C:\Users\runneradmin\.m2"
-          rd /s /q "C:\Users\runneradmin\.gradle"
-          rd /s /q "C:\Users\runneradmin\.android"
-          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp"
-          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader"
-          
-          :: KRİTİK NOKTA: Hata olsa bile GitHub'a başarılı dön ki kırmızı çarpı olmasın.
-          exit /b 0
-          "@
-          Set-Content -Path "C:\fast_delete.bat" -Value $batContent
-          
-          # Zorla kapatma YOK. İşlem bitene kadar bekliyor.
-          Write-Host "Silme islemleri yapiliyor. Hata veren sistem dosyalari listeden cikarildigi icin hizli bitecek..."
-          $p = Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -PassThru
-          $p.WaitForExit()
-          
-          # Temizlik
-          Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
+          # Silinecek devasa klasörlerin listesi
+          $foldersToDelete = @(
+            "C:\hostedtoolcache",
+            "C:\Program Files\Microsoft Visual Studio",
+            "C:\Program Files (x86)\Microsoft Visual Studio",
+            "C:\ProgramData\Microsoft\VisualStudio",
+            "C:\Program Files\Microsoft SQL Server",
+            "C:\Program Files\Android",
+            "C:\Program Files\Git",
+            "C:\Program Files\Docker",
+            "C:\ProgramData\Docker",
+            "C:\ProgramData\Package Cache",
+            "C:\Windows\SoftwareDistribution",
+            "C:\Program Files\Google",
+            "C:\Program Files (x86)\Microsoft\Edge",
+            "C:\Program Files\PostgreSQL",
+            "C:\Program Files\MySQL",
+            "C:\Program Files\R",
+            "C:\Program Files\Rtools",
+            "C:\Program Files\nodejs",
+            "C:\Program Files\dotnet",
+            "C:\Program Files\Java",
+            "C:\Program Files\Azure",
+            "C:\ProgramData\chocolatey",
+            "C:\Users\runneradmin\.nuget",
+            "C:\Users\runneradmin\.m2",
+            "C:\Users\runneradmin\.gradle",
+            "C:\Users\runneradmin\.android",
+            "C:\Users\runneradmin\AppData\Local\Temp",
+            "C:\ProgramData\Microsoft\Network\Downloader",
+            "C:\Windows\Temp",
+            "C:\Windows\Prefetch"
+          )
+
+          foreach ($folder in $foldersToDelete) {
+            if (Test-Path $folder) {
+              Write-Host "Siliniyor: $folder"
+              try {
+                # .NET Çekirdek Komutu: Diske sormadan direkt siler. HDD/SSD fark etmez, çok hızlıdır.
+                [System.IO.Directory]::Delete($folder, $true)
+              } catch {
+                # Eğer .NET kilitli bir dosya görürse hata vermesin, CMD ile yedek plan devreye girsin
+                cmd.exe /c "rd /s /q `"$folder`"" > $null 2>&1
+              }
+            }
+          }
           
           Write-Host "Silme islemi tamamlandi!"
           exit 0
@@ -191,9 +162,6 @@ jobs:
           }
           exit 0
 
-      # ==========================================
-      # 4. SANAL BELLEK VE HAZIRDA BEKLETME
-      # ==========================================
       - name: SANAL BELLEK (PAGEFILE) VE TEMP TEMİZLİĞİ
         run: |
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force
