@@ -10,7 +10,7 @@ jobs:
     
     steps:
       # ==========================================
-      # EN ÜSTTE SİSTEM BİLGİLERİ
+      # 1. SİSTEM DONANIM BİLGİLERİ
       # ==========================================
       - name: SISTEM DONANIM BILGILERI
         run: |
@@ -18,16 +18,13 @@ jobs:
           Write-Host "             SISTEM DONANIM BILGILERI              "
           Write-Host "=================================================="
           
-          # 1. Islemci (CPU)
           $cpu = Get-CimInstance -ClassName Win32_Processor
           Write-Host "[+] Islemci (CPU) : $($cpu.Name)"
           Write-Host "[+] Cekirdek (Core): $($cpu.NumberOfCores) Cekirdek / $($cpu.NumberOfLogicalProcessors) Mantiksal Islemci"
           
-          # 2. RAM
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari   : $ram GB"
           
-          # 3. Disk Tipi (SSD mi HDD mi?)
           Write-Host "--------------------------------------------------"
           $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object FriendlyName, MediaType, @{Name="SizeGB";Expression={[math]::Round($_.Size/1GB, 2)}}
           if ($disks) {
@@ -35,22 +32,15 @@ jobs:
                   if (-not $disk.MediaType) { $media = "Bilinmiyor" } else { $media = $disk.MediaType }
                   Write-Host "[+] Disk          : $($disk.FriendlyName) | Tipi: $media | Kapasite: $($disk.SizeGB) GB"
               }
-          } else {
-              # Get-PhysicalDisk calismazsa alternatif yontem
-              $altDisks = Get-CimInstance -ClassName Win32_DiskDrive | Select-Object Model, MediaType, @{Name="SizeGB";Expression={[math]::Round($_.Size/1GB, 2)}}
-              foreach ($d in $altDisks) {
-                  Write-Host "[+] Disk          : $($d.Model) | Tipi: $($d.MediaType) | Kapasite: $($d.SizeGB) GB"
-              }
           }
           
-          # 4. C: Surucusu Bos Alan
           $cDrive = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
           $freeSpace = [math]::Round($cDrive.FreeSpace / 1GB, 2)
           $totalSpace = [math]::Round($cDrive.Size / 1GB, 2)
           Write-Host "--------------------------------------------------"
           Write-Host "[+] C: Surucusu   : $freeSpace GB Bos / $totalSpace GB Toplam"
           Write-Host "=================================================="
-          Write-Host "Temizlik baslatiliyor, lutfen bekleyin..."
+          Write-Host "BRUTAL TEMIZLIK BASLATILIYOR..."
           exit 0
 
       - name: Tailscale'i Başlat
@@ -75,58 +65,99 @@ jobs:
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
           exit 0
 
-      - name: HAYALET AVI (Registry, Başlat Menüsü ve Arama İndeksi)
+      - name: ROBLOX TEMİZLİĞİ (Docker, WSL, SQL, Visual Studio)
         run: |
-          Write-Host "Hayalet uygulamalar ve izleri siliniyor..."
+          Write-Host "Devasa boyutlu sistem araclari siliniyor..."
           
+          # Bos bir klasor olusturup robocopy /MIR ile kilitli dosyalari zorla siliyoruz
+          New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
+          
+          $targetDirs = @(
+            "C:\hostedtoolcache",
+            "C:\Program Files\Microsoft Visual Studio",
+            "C:\Program Files (x86)\Microsoft Visual Studio",
+            "C:\Program Files\Docker",
+            "C:\ProgramData\Docker",
+            "C:\Program Files\Microsoft SQL Server",
+            "C:\Program Files (x86)\Microsoft SQL Server",
+            "C:\Program Files\Android",
+            "C:\Program Files\Java",
+            "C:\Program Files\nodejs",
+            "C:\Program Files\dotnet",
+            "C:\Program Files\Google",
+            "C:\Program Files (x86)\Microsoft\Edge",
+            "C:\ProgramData\chocolatey",
+            "C:\ProgramData\Package Cache"
+          )
+
+          foreach ($dir in $targetDirs) {
+            if (Test-Path $dir) {
+              # Klasoru bosalt
+              robocopy "C:\empty_dir" "$dir" /MIR /R:0 /W:0 /NFL /NDL /NJH /NJS | Out-Null
+              # Klasoru sil
+              Remove-Item -Path $dir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+          Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
+          exit 0
+
+      - name: KULLANICI KLASÖRLERİ VE HAYALET AVI
+        run: |
+          # Masaüstü Temizliği
+          Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # Kullanıcı AppData ve Cache Temizliği (Python, Gradle, Maven, npm)
+          Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Programs\Python\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\AppData\Local\pip\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\.gradle\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\.m2\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\.android\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\AppData\Roaming\npm\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Microsoft\Edge*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # Başlat Menüsü ve Kayıt Defteri (Hayalet Uygulamalar)
           Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\runneradmin\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
           
           $appPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\*", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\*")
           foreach ($path in $appPaths) {
-            Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match "msedge|chrome|python|unity|visualstudio" } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
+            Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match "msedge|chrome|python|unity|visualstudio|docker" } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
           }
           
           Remove-Item -Path "C:\ProgramData\Microsoft\Search\Data\Applications\Windows\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Microsoft\Edge*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Packages\*Edge*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Programs\Python\*" -Recurse -Force -ErrorAction SilentlyContinue
           exit 0
 
-      - name: BÜYÜK SÖMÜRÜ (Diskte Yer Açma)
+      - name: SANAL BELLEK (PAGEFILE) VE DERİN TEMİZLİK
         run: |
-          Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\hostedtoolcache\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\Google\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Python*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\Python*" -Recurse -Force -ErrorAction SilentlyContinue
-
+          Write-Host "Sanal bellek kapatiliyor ve Windows derinlikleri temizleniyor..."
+          
+          # Sanal Belleği (Pagefile) Kayıt Defterinden Zorla Kapat
+          try {
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force
+            Write-Host "Pagefile devre disi birakildi."
+          } catch {}
+          
+          # Hazırda Bekletme ve Gölge Kopyalar
+          powercfg -h off
+          vssadmin delete shadows /all /quiet
+          Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+          
+          # Windows Güncelleme, Log ve Çöp Kalıntıları
+          Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Prefetch\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Installer\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Logs\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Panther\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Minidump\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\memory.dmp" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\SoftwareDistribution\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\Installer\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\ProgramData\Package Cache\*" -Recurse -Force -ErrorAction SilentlyContinue
           
-          powercfg -h off
-          vssadmin delete shadows /all /quiet
-          Clear-RecycleBin -Force -ErrorAction SilentlyContinue
-          exit 0
-
-      - name: 80 GB BARİYERİNİ AŞ (Derin Temizlik)
-        run: |
+          # DISM ile WinSxS (Güncelleme Yedekleri) Temizliği
           Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
           Dism.exe /online /Cleanup-Image /SPSuperseded
-          try {
-            $sys = Get-CimInstance -ClassName Win32_ComputerSystem
-            Set-CimInstance -InputObject $sys -Property @{AutomaticManagedPagefile=$false}
-            $pagefile = Get-CimInstance -ClassName Win32_PageFileSetting
-            if ($pagefile) { Set-CimInstance -InputObject $pagefile -Property @{InitialSize=0; MaximumSize=0} }
-          } catch {}
           exit 0
 
       - name: Firefox'u Kur ve Masaüstüne At
@@ -168,13 +199,18 @@ jobs:
       - name: Bağlantı Bilgilerini Göster
         run: |
           Write-Host "===================================="
-          Write-Host "   ERROR-4004 ULTIMATE TEMİZLİK     "
+          Write-Host "     ERROR-4004 BRUTAL TEMİZLİK     "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
           Write-Host "Kullanici Adi : ERROR-4004"
           Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
           Write-Host "===================================="
+          
+          # Son durum kontrolü
+          $cDrive = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
+          $freeSpace = [math]::Round($cDrive.FreeSpace / 1GB, 2)
+          Write-Host "C: SURUCUSUNDEKI GUNCEL BOS ALAN: $freeSpace GB"
           exit 0
           
       - name: Sistemi 60 Saat Boyunca Açık Tut
