@@ -13,7 +13,6 @@ jobs:
       # 1. DETAYLI SİSTEM BİLGİLERİ VE DİSK TÜRÜ TESPİTİ
       # ==========================================
       - name: DETAYLI SISTEM DONANIM BILGILERI
-        id: sys_info
         run: |
           Write-Host "================================================================="
           Write-Host "                 DETAYLI SISTEM BILGILERI                        "
@@ -89,18 +88,18 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. 4 PARALEL CMD + 5 DAKİKA KESİN SINIRI
+      # 3. ZAMAN SINIRI OLMAYAN, TAM BİTEN TEMİZLİK
       # ==========================================
-      - name: HYPERSPEED SİLME (Hedef Maksimum Temizlik)
+      - name: HYPERSPEED SİLME (Hedef 85+ GB)
         run: |
-          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:16" }
+          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:8" }
           Write-Host "Silme islemleri baslatiliyor. Disk: $env:DISK_TYPE (Parametre: $mtParam)"
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # DİKKAT: Tüm rd /s /q komutlarının sonuna "> nul 2>&1" eklendi.
-          # Bu sayede silinemeyen dosyalar için Windows'un ürettiği "Access is denied" hataları loglara yansımayacak, işlem sessizce devam edecek.
-
+          # Tüm rd /s /q komutlarının sonuna "> nul 2>&1" eklendi. Hata verse bile loga yazmayacak.
+          # HATA VEREN KLASÖRLER LİSTEDEN ÇIKARILMADI, Sadece SESSİZLEŞTİRİLDİ.
+          
           # CMD 1: hostedtoolcache
           $bat1 = @"
           @echo off
@@ -141,6 +140,8 @@ jobs:
           rd /s /q "C:\Windows\SoftwareDistribution" > nul 2>&1
           rd /s /q "C:\Program Files\Google" > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft\Edge" > nul 2>&1
+          rd /s /q "C:\ProgramData\Microsoft\VisualStudio" > nul 2>&1
+          rd /s /q "C:\Windows\WinSxS\Backup" > nul 2>&1
           exit /b 0
           "@
           Set-Content -Path "C:\del3.bat" -Value $bat3
@@ -161,21 +162,17 @@ jobs:
           Set-Content -Path "C:\del4.bat" -Value $bat4
           
           # 4 CMD PENCERESİNİ AYNI ANDA BAŞLAT
-          Write-Host "4 CMD penceresi paralel olarak calisiyor..."
+          Write-Host "4 CMD penceresi paralel olarak calisiyor. Islemlerin BITMESI bekleniyor..."
           $p1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
           $p2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
           $p3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
           $p4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
           
-          # TAM 300 SANİYE (5 DAKİKA) BEKLE
-          Write-Host "Silme islemleri yapiliyor. Maksimum 5 dakika bekleniyor..."
-          Start-Sleep -Seconds 300
-          
-          # 5 dakika sonunda hala calisan varsa zorla kapat
-          Stop-Process -Id $p1.Id -Force -ErrorAction SilentlyContinue
-          Stop-Process -Id $p2.Id -Force -ErrorAction SilentlyContinue
-          Stop-Process -Id $p3.Id -Force -ErrorAction SilentlyContinue
-          Stop-Process -Id $p4.Id -Force -ErrorAction SilentlyContinue
+          # ZORLA KAPATMA (STOP-PROCESS) KALDIRILDI. İşlemlerin tamamen bitmesi bekleniyor.
+          $p1.WaitForExit()
+          $p2.WaitForExit()
+          $p3.WaitForExit()
+          $p4.WaitForExit()
           
           # Temizlik
           Remove-Item -Path "C:\del1.bat" -Force -ErrorAction SilentlyContinue
