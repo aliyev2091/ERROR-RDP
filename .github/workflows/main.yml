@@ -28,86 +28,109 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           
-          # UAC'ı (Kullanıcı Hesabı Denetimi) Tamamen Kapat - FULL ADMIN YETKİSİ
+          # UAC'ı Kapat (Tam Yetki)
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
           exit 0
 
-      - name: Firefox'u Kur ve Masaüstüne Kısayol At (Garantili)
+      - name: BÜYÜK SÖMÜRÜ (Dosyalar, Kayıt Defteri ve Masaüstü)
         run: |
-          $firefoxUrl = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US"
-          Invoke-WebRequest -Uri $firefoxUrl -OutFile "$env:TEMP\firefox_installer.exe"
-          Start-Process -FilePath "$env:TEMP\firefox_installer.exe" -ArgumentList "/S" -Wait
-          
-          # Masaüstü kısayolunu oluştur (Hem Public hem kullanıcı masaüstüne atıyoruz)
-          $WshShell = New-Object -ComObject WScript.Shell
-          
-          # Public Masaüstü
-          $Shortcut1 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Firefox.lnk")
-          $Shortcut1.TargetPath = "C:\Program Files\Mozilla Firefox\firefox.exe"
-          $Shortcut1.Save()
-          
-          # Kullanıcı Masaüstü (Direkt ERROR-4004'ün masaüstü)
-          New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
-          $Shortcut2 = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Firefox.lnk")
-          $Shortcut2.TargetPath = "C:\Program Files\Mozilla Firefox\firefox.exe"
-          $Shortcut2.Save()
-          exit 0
-
-      - name: SİSTEMİ SOYMA (Devasa Yer Açma ve Uygulama Silme)
-        run: |
-          # 1. Masaüstünü Temizle (Sadece Edge, Chrome gibi kısayollar gitsin)
+          # 1. Masaüstünü ve Hayalet İkonları KÖKTEN SİL
+          Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
-          # 2. GitHub'ın Devasa Araç Kütüphanesini Sil (Python, Java, Ruby, Node vs.)
+          Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+
+          # 2. Geliştirici Araçlarını ve Program Dosyalarını Sil
           Remove-Item -Path "C:\hostedtoolcache\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
-          # 3. Visual Studio, Android SDK, Dotnet, Java Gibi Ağır Uygulamaları Sil
           Remove-Item -Path "C:\Program Files\Microsoft Visual Studio\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files (x86)\Microsoft Visual Studio\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\Android\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\dotnet\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\Java\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\nodejs\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
-          # 4. Chocolatey (Paket Yöneticisi) Önbelleklerini Temizle
-          Remove-Item -Path "C:\ProgramData\chocolatey\lib\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\ProgramData\chocolatey\logs\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
-          # 5. Google Chrome ve Microsoft Edge'i Zorla Kaldır
           Remove-Item -Path "C:\Program Files\Google\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Program Files\Unity\*" -Recurse -Force -ErrorAction SilentlyContinue
           
-          # 6. Windows Mağaza Uygulamalarını Söküp At
+          # 3. KAYIT DEFTERİNDEN (REGISTRY) HAYALET UYGULAMALARI SİL
+          $uninstallPaths = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+          )
+          foreach ($path in $uninstallPaths) {
+            Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object { 
+              $_.DisplayName -match "Chrome|Edge|Unity|Visual Studio|Python|Java|Node" 
+            } | ForEach-Object {
+              Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          # 4. Windows Mağaza Uygulamalarını Söküp At
           Get-AppxPackage -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue
           
-          # 7. Hazırda Bekletmeyi Kapat ve Gölge Kopyaları Sil
+          # 5. Hazırda Bekletmeyi Kapat, Gölge Kopyaları ve Geri Dönüşüm Kutusunu Boşalt
           powercfg -h off
           vssadmin delete shadows /all /quiet
+          Clear-RecycleBin -Force -ErrorAction SilentlyContinue
           
-          # 8. Tüm Geçici (Temp) ve Windows Güncelleme Çöplerini Sil
+          # 6. Tüm Geçici Dosyaları Sil
           Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Prefetch\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Installer\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\ProgramData\Package Cache\*" -Recurse -Force -ErrorAction SilentlyContinue
 
-          # 9. Defender'ı Kapat
+          # 7. Defender'ı Kapat
           Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-          Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
-          
           exit 0
 
-      - name: Gereksiz ve Sömüren Servisleri Kapat
+      - name: 80 GB BARİYERİNİ AŞ (WinSxS ve Pagefile Temizliği)
+        run: |
+          Write-Host "Windows'un derinliklerindeki çöpler temizleniyor ve Pagefile kapatılıyor..."
+          
+          # 1. WinSxS (Güncelleme Yedekleri) Temizliği - Devasa Yer Açar
+          Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
+          
+          # 2. Sanal Bellek (Pagefile) Devre Dışı Bırak
+          $computersys = Get-WmiObject Win32_ComputerSystem -EnableAllPrivileges
+          $computersys.AutomaticManagedPagefile = $False
+          $computersys.Put()
+          $pagefile = Get-WmiObject Win32_PageFileSetting
+          if ($pagefile) { 
+            $pagefile.InitialSize = 0
+            $pagefile.MaximumSize = 0
+            $pagefile.Put() 
+          }
+          exit 0
+
+      - name: Firefox'u Kur ve Masaüstüne Kısayol At
+        run: |
+          $firefoxUrl = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US"
+          Invoke-WebRequest -Uri $firefoxUrl -OutFile "$env:TEMP\firefox_installer.exe"
+          Start-Process -FilePath "$env:TEMP\firefox_installer.exe" -ArgumentList "/S" -Wait
+          
+          # Kısayolları Yeniden Oluştur (Her şey silindiği için en son biz ekliyoruz)
+          $WshShell = New-Object -ComObject WScript.Shell
+          
+          $Shortcut1 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Firefox.lnk")
+          $Shortcut1.TargetPath = "C:\Program Files\Mozilla Firefox\firefox.exe"
+          $Shortcut1.Save()
+          
+          New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
+          $Shortcut2 = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Firefox.lnk")
+          $Shortcut2.TargetPath = "C:\Program Files\Mozilla Firefox\firefox.exe"
+          $Shortcut2.Save()
+          exit 0
+
+      - name: Gereksiz Servisleri ve FULL PERFORMANS Ayarlarını Uygula
         run: |
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc")
           foreach ($svc in $services) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
           }
-          exit 0
-
-      - name: FULL PERFORMANS (Ağ ve Arayüz)
-        run: |
+          
           powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
           
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
@@ -126,17 +149,18 @@ jobs:
       - name: Bağlantı Bilgilerini Göster
         run: |
           Write-Host "===================================="
-          Write-Host "   ERROR-4004 GOD MODE (FULL ADMIN)  "
+          Write-Host "   ERROR-4004 80GB+ TEMİZLİK MODU   "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
           Write-Host "Kullanici Adi : ERROR-4004"
           Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
-          Write-Host "Tarayici      : Firefox (Masaüstünde Garantili)"
+          Write-Host "Tarayici      : Firefox"
+          Write-Host "Not: Registry temizlendi, WinSxS sıfırlandı, Pagefile kapatıldı."
           Write-Host "===================================="
           exit 0
           
       - name: Sistemi 60 Saat Boyunca Açık Tut
         run: |
-          Write-Host "God Mode aktif. 60 saat uyku basliyor..."
+          Write-Host "Sistemde 80 GB'tan fazla yer acildi. 60 saat uyku basliyor..."
           Start-Sleep -Seconds 216000 
