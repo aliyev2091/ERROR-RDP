@@ -10,7 +10,7 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. DETAYLI SİSTEM BİLGİLERİ VE DİSK TÜRÜ TESPİTİ
+      # 1. DETAYLI SİSTEM BİLGİLERİ VE KESİN DİSK TESPİTİ
       # ==========================================
       - name: DETAYLI SISTEM DONANIM BILGILERI
         id: sys_info
@@ -29,9 +29,15 @@ jobs:
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
           
+          # KESİN DİSK TESPİTİ (WMI Üzerinden - En Garantili Yöntem)
+          $mediaType = "SSD" # Varsayılan
           try {
-              $disk = Get-PhysicalDisk -ErrorAction Stop | Select-Object -First 1
-              $mediaType = $disk.MediaType
+              $diskInfo = Get-CimInstance -ClassName Win32_DiskDrive | Where-Object { $_.Index -eq 0 }
+              if ($diskInfo.Model -match "NVMe|SSD|Solid State") {
+                  $mediaType = "SSD"
+              } elseif ($diskInfo.MediaType -match "Fixed hard disk") {
+                  $mediaType = "HDD"
+              }
           } catch {
               $mediaType = "SSD"
           }
@@ -92,69 +98,109 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. PARALEL ROBLINUX MOTORU (Hedef 85+ GB)
+      # 3. 4'LÜ CMD MOTORU (Hedef 85+ GB, Hata Vermez)
       # ==========================================
       - name: HYPERSPEED SİLME (Hedef 85+ GB)
         run: |
-          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:16" }
+          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:8" }
           Write-Host "Silme islemleri baslatiliyor. Tespit edilen disk: $env:DISK_TYPE (Robocopy Parametresi: $mtParam)"
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # 4 PARALEL İŞLEM BAŞLATIYORUZ. Aynı anda 4 farklı yeri silecekler.
+          # 4 FARKLI CMD DOSYASI OLUŞTURUYORUZ (Gerçek Paralel Çalışma İçin)
           
-          # 1. İşlem: hostedtoolcache ve Visual Studio (En ağırlar)
-          $job1 = Start-Job -ScriptBlock {
-            param($mt)
-            robocopy C:\empty_dir "C:\hostedtoolcache" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-            robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-            robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          } -ArgumentList $mtParam
+          # CMD 1: Hostedtoolcache (En ağır) ve Visual Studio
+          $bat1 = @"
+          @echo off
+          takeown /f "C:\hostedtoolcache" /r /d y > nul 2>&1
+          icacls "C:\hostedtoolcache" /grant administrators:F /t > nul 2>&1
+          robocopy C:\empty_dir "C:\hostedtoolcache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\hostedtoolcache"
+          robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Microsoft Visual Studio"
+          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del1.bat" -Value $bat1
 
-          # 2. İşlem: Diller, Veritabanları (Sadece ana klasörler)
-          $job2 = Start-Job -ScriptBlock {
-            param($mt)
-            robocopy C:\empty_dir "C:\Program Files\Microsoft SQL Server" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-            robocopy C:\empty_dir "C:\Program Files\Android" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-            robocopy C:\empty_dir "C:\Program Files\Git" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-            robocopy C:\empty_dir "C:\Program Files\Docker" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          } -ArgumentList $mtParam
+          # CMD 2: Diller, Veritabanları ve Docker
+          $bat2 = @"
+          @echo off
+          robocopy C:\empty_dir "C:\Program Files\Microsoft SQL Server" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Microsoft SQL Server"
+          robocopy C:\empty_dir "C:\Program Files\Android" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Android"
+          robocopy C:\empty_dir "C:\Program Files\Git" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Git"
+          robocopy C:\empty_dir "C:\Program Files\Docker" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Docker"
+          rd /s /q "C:\ProgramData\Docker"
+          rd /s /q "C:\Program Files\PostgreSQL"
+          rd /s /q "C:\Program Files\MySQL"
+          rd /s /q "C:\Program Files\R"
+          rd /s /q "C:\Program Files\Rtools"
+          rd /s /q "C:\Program Files\nodejs"
+          rd /s /q "C:\Program Files\dotnet"
+          rd /s /q "C:\Program Files\Java"
+          rd /s /q "C:\Program Files\Azure"
+          rd /s /q "C:\ProgramData\chocolatey"
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del2.bat" -Value $bat2
 
-          # 3. İşlem: Önbellekler ve Çöpler
-          $job3 = Start-Job -ScriptBlock {
-            param($mt)
-            robocopy C:\empty_dir "C:\ProgramData\Package Cache" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-            robocopy C:\empty_dir "C:\Windows\SoftwareDistribution" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-            robocopy C:\empty_dir "C:\Program Files\Google" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-            robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft\Edge" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          } -ArgumentList $mtParam
+          # CMD 3: Tarayıcılar, Installer ve SoftwareDistribution
+          $bat3 = @"
+          @echo off
+          robocopy C:\empty_dir "C:\ProgramData\Package Cache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\ProgramData\Package Cache"
+          robocopy C:\empty_dir "C:\Windows\SoftwareDistribution" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Windows\SoftwareDistribution"
+          robocopy C:\empty_dir "C:\Program Files\Google" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Google"
+          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft\Edge" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
+          rd /s /q "C:\Windows\Installer"
+          rd /s /q "C:\Windows\WinSxS\Backup"
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del3.bat" -Value $bat3
 
-          # 4. İşlem: Kullanıcı Önbellekleri
-          $job4 = Start-Job -ScriptBlock {
-            param($mt)
-            robocopy C:\empty_dir "C:\Users\runneradmin\.nuget" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-            robocopy C:\empty_dir "C:\Users\runneradmin\.m2" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-            robocopy C:\empty_dir "C:\Users\runneradmin\.gradle" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-            robocopy C:\empty_dir "C:\ProgramData\Microsoft\Network\Downloader" /MIR $mt /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          } -ArgumentList $mtParam
+          # CMD 4: Sistem Derinlikleri ve AppData Çöpleri
+          $bat4 = @"
+          @echo off
+          rd /s /q "C:\Windows\Temp"
+          rd /s /q "C:\Windows\Prefetch"
+          rd /s /q "C:\Windows\Help"
+          rd /s /q "C:\Windows\LiveKernelReports"
+          rd /s /q "C:\Users\runneradmin\.nuget"
+          rd /s /q "C:\Users\runneradmin\.m2"
+          rd /s /q "C:\Users\runneradmin\.gradle"
+          rd /s /q "C:\Users\runneradmin\.android"
+          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp"
+          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader"
+          rd /s /q "C:\ProgramData\Microsoft\Windows\WER"
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del4.bat" -Value $bat4
           
-          # 4 işlemin bitmesini bekle (Zaman aşımı YOK). Paralel oldukları için hızlı bitecek.
-          Write-Host "Silme islemleri paralel olarak yapiliyor..."
-          Wait-Job $job1, $job2, $job3, $job4 | Out-Null
+          # 4 CMD PENCERESİNİ AYNI ANDA BAŞLAT VE BİTMELERİNİ BEKLE (Zorla Kapatma Yok)
+          Write-Host "Silme islemleri 4 farkli CMD penceresinde paralel olarak yapiliyor..."
+          $p1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
+          $p2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
+          $p3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
+          $p4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
           
-          # İşlemleri temizle
-          Remove-Job $job1, $job2, $job3, $job4 -Force -ErrorAction SilentlyContinue
-          
-          # Kalan boş klasörleri sil (rd ile)
-          $dirsToRemove = @(
-            "C:\hostedtoolcache", "C:\Program Files\Microsoft Visual Studio", "C:\Program Files (x86)\Microsoft Visual Studio",
-            "C:\Program Files\Microsoft SQL Server", "C:\Program Files\Android", "C:\Program Files\Git", "C:\Program Files\Docker",
-            "C:\ProgramData\Package Cache", "C:\Windows\SoftwareDistribution", "C:\Program Files\Google", "C:\Program Files (x86)\Microsoft\Edge",
-            "C:\Users\runneradmin\.nuget", "C:\Users\runneradmin\.m2", "C:\Users\runneradmin\.gradle", "C:\ProgramData\Microsoft\Network\Downloader"
-          )
-          foreach ($dir in $dirsToRemove) { cmd.exe /c "rd /s /q `"$dir`"" > $null 2>&1 }
+          $p1.WaitForExit()
+          $p2.WaitForExit()
+          $p3.WaitForExit()
+          $p4.WaitForExit()
           
           # Temizlik
+          Remove-Item -Path "C:\del1.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del2.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del3.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del4.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
