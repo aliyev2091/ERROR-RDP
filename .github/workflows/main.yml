@@ -65,9 +65,8 @@ jobs:
           cmd.exe /c "taskkill /F /IM ServiceFabricLocalClusterManager.exe /T" > $null 2>&1
           cmd.exe /c "taskkill /F /IM VBCSCompiler.exe /T" > $null 2>&1
           cmd.exe /c "taskkill /F /IM MSBuild.exe /T" > $null 2>&1
-          cmd.exe /c "taskkill /F /IM git.exe /T" > $null 2>&1
           
-          $processes = Get-Process | Where-Object { $_.Path -match "Visual Studio|ServiceFabric|dotnet|java|node|docker|Unity|postgres|mysql" }
+          $processes = Get-Process | Where-Object { $_.Path -match "Visual Studio|ServiceFabric|dotnet|java|node|docker|Unity|git|postgres|mysql" }
           foreach ($p in $processes) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
           
           $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller", "DoSvc", "postgresql*", "MySQL*")
@@ -78,97 +77,71 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. 4 PARALEL CMD (Kilitli Dosyalar Hariç, Zaman Sınırı Yok)
+      # 3. 4 PARALEL JOB MOTORU (Kilitli Dosyalar Hariç, 200 Saniye Sınırı)
       # ==========================================
-      - name: HYPERSPEED SİLME (Hedef 85+ GB, Maks 4 Dk)
+      - name: HYPERSPEED SİLME (Hedef 85+ GB)
         run: |
-          Write-Host "Silme islemleri baslatiliyor. 4 CMD motoru ayni anda calisiyor..."
+          Write-Host "Silme islemleri baslatiliyor. 4 paralel islem calisiyor..."
           
-          # Robocopy için boş klasör oluştur
-          New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
+          # 1. İşlem: hostedtoolcache ve Visual Studio (.NET ile en hızlısı)
+          $job1 = Start-Job -ScriptBlock {
+            if (Test-Path "C:\hostedtoolcache") {
+              try { [System.IO.Directory]::Delete("C:\hostedtoolcache", $true) } catch {}
+            }
+            cmd.exe /c "rd /s /q `"C:\Program Files\Microsoft Visual Studio`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files (x86)\Microsoft Visual Studio`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\ProgramData\Microsoft\VisualStudio`"" > $null 2>&1
+          }
           
-          # CMD 1: hostedtoolcache (En ağır) ve Visual Studio
-          $bat1 = @"
-          @echo off
-          robocopy C:\empty_dir "C:\hostedtoolcache" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\hostedtoolcache"
-          robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files\Microsoft Visual Studio"
-          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
-          "@
-          Set-Content -Path "C:\del1.bat" -Value $bat1
-
-          # CMD 2: Diller, Veritabanları ve Docker
-          $bat2 = @"
-          @echo off
-          rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
-          rd /s /q "C:\Program Files (x86)\Windows Kits"
-          rd /s /q "C:\Program Files\Git"
-          rd /s /q "C:\Program Files\Microsoft SQL Server"
-          rd /s /q "C:\Program Files\PostgreSQL"
-          rd /s /q "C:\Program Files\MySQL"
-          rd /s /q "C:\Program Files\R"
-          rd /s /q "C:\Program Files\Rtools"
-          rd /s /q "C:\Program Files\nodejs"
-          rd /s /q "C:\Program Files\dotnet"
-          rd /s /q "C:\Program Files\Java"
-          rd /s /q "C:\Program Files\Android"
-          rd /s /q "C:\Program Files\Docker"
-          rd /s /q "C:\ProgramData\Docker"
-          rd /s /q "C:\Program Files\Azure"
-          rd /s /q "C:\ProgramData\chocolatey"
-          "@
-          Set-Content -Path "C:\del2.bat" -Value $bat2
-
-          # CMD 3: Tarayıcılar, Installer, SoftwareDistribution
-          $bat3 = @"
-          @echo off
-          robocopy C:\empty_dir "C:\Windows\Installer" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Windows\Installer"
-          rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
-          rd /s /q "C:\Program Files\Google"
-          rd /s /q "C:\ProgramData\Package Cache"
-          rd /s /q "C:\Windows\SoftwareDistribution"
-          "@
-          Set-Content -Path "C:\del3.bat" -Value $bat3
-
-          # CMD 4: Sistem Derinlikleri ve AppData (WinSxS ve SDKs ÇIKARILDI)
-          $bat4 = @"
-          @echo off
-          rd /s /q "C:\Windows\Temp"
-          rd /s /q "C:\Windows\Prefetch"
-          rd /s /q "C:\Windows\Panther"
-          rd /s /q "C:\Windows\Logs"
-          rd /s /q "C:\Users\runneradmin\.nuget"
-          rd /s /q "C:\Users\runneradmin\.m2"
-          rd /s /q "C:\Users\runneradmin\.gradle"
-          rd /s /q "C:\Users\runneradmin\.android"
-          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp"
-          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader"
-          rd /s /q "C:\ProgramData\Microsoft\Windows\WER"
-          "@
-          Set-Content -Path "C:\del4.bat" -Value $bat4
+          # 2. İşlem: Diller, Veritabanları ve Ağır Programlar
+          $job2 = Start-Job -ScriptBlock {
+            cmd.exe /c "rd /s /q `"C:\Program Files\Git`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\Microsoft SQL Server`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\PostgreSQL`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\MySQL`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\R`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\Rtools`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\nodejs`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\dotnet`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\Java`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\Android`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\Docker`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\ProgramData\Docker`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\Azure`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\ProgramData\chocolatey`"" > $null 2>&1
+          }
           
-          # 4 CMD'yi AYNI ANDA baslat
-          Write-Host "CMD'ler calisiyor ve bitmesi bekleniyor..."
-          $t1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
-          $t2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
-          $t3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
-          $t4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
+          # 3. İşlem: Tarayıcılar, Installer ve Sistem Çöpleri (85 GB için)
+          $job3 = Start-Job -ScriptBlock {
+            cmd.exe /c "rd /s /q `"C:\Program Files (x86)\Microsoft\Edge`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\Google`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\ProgramData\Package Cache`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Windows\Installer`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Windows\SoftwareDistribution`"" > $null 2>&1
+          }
           
-          # Kilitli dosyalar listeden çıkarıldığı için işlem çok hızlı bitecek.
-          $t1.WaitForExit()
-          $t2.WaitForExit()
-          $t3.WaitForExit()
-          $t4.WaitForExit()
+          # 4. İşlem: Sistem Derinlikleri ve AppData Çöpleri (WinSxS ÇIKARILDI)
+          $job4 = Start-Job -ScriptBlock {
+            cmd.exe /c "rd /s /q `"C:\Windows\Temp`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Windows\Prefetch`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Windows\Panther`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Windows\Logs`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Users\runneradmin\.nuget`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Users\runneradmin\.m2`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Users\runneradmin\.gradle`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Users\runneradmin\.android`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Users\runneradmin\AppData\Local\Temp`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\ProgramData\Microsoft\Network\Downloader`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\ProgramData\Microsoft\Windows\WER`"" > $null 2>&1
+          }
           
-          # Batch dosyalarını temizle
-          Remove-Item -Path "C:\del1.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del2.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del3.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del4.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
+          # 200 Saniye (3.3 Dakika) bekle. Kilitli dosyalar listede olmadığı için hızlı bitecek.
+          Write-Host "Silme islemleri yapiliyor. Maksimum 3.3 dakika bekleniyor..."
+          Wait-Job $job1, $job2, $job3, $job4 -Timeout 200 | Out-Null
+          
+          # Süre bitince zorla kapat (Hata vermesini engeller ve süreyi kısaltır)
+          Stop-Job $job1, $job2, $job3, $job4 -ErrorAction SilentlyContinue
+          Remove-Job $job1, $job2, $job3, $job4 -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
           exit 0
