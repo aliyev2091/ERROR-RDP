@@ -77,15 +77,15 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. ROBLINUX MOTORU (Süre Sınırlı, Hızlı Bitiş)
+      # 3. ROBLINUX MOTORU (Sadece En Ağır Dosyalar, Beklemeli)
       # ==========================================
-      - name: HYPERSPEED SİLME (Hedef 85+ GB, Maks 4 Dk)
+      - name: HYPERSPEED SİLME (Hedef 85+ GB)
         run: |
           Write-Host "Silme islemleri baslatiliyor. Robocopy ve CMD motoru calisiyor..."
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # Robocopy ile ana kütleleri saniyeler içinde sil, ardından kalanları rd ile temizle
+          # ROBLINUX: SADECE en agir 3 klasoru siliyoruz. Inatci rd komutlari cikarildi.
           $batContent = @"
           @echo off
           robocopy C:\empty_dir "C:\hostedtoolcache" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
@@ -94,55 +94,19 @@ jobs:
           rd /s /q "C:\Program Files\Microsoft Visual Studio"
           robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
-          
-          rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
-          rd /s /q "C:\Program Files\Git"
-          rd /s /q "C:\Program Files\Microsoft SQL Server"
-          rd /s /q "C:\Program Files\PostgreSQL"
-          rd /s /q "C:\Program Files\MySQL"
-          rd /s /q "C:\Program Files\R"
-          rd /s /q "C:\Program Files\Rtools"
-          rd /s /q "C:\Program Files\nodejs"
-          rd /s /q "C:\Program Files\dotnet"
-          rd /s /q "C:\Program Files\Java"
-          rd /s /q "C:\Program Files\Android"
-          rd /s /q "C:\Program Files\Docker"
-          rd /s /q "C:\ProgramData\Docker"
-          rd /s /q "C:\Program Files\Azure"
-          rd /s /q "C:\ProgramData\chocolatey"
-          rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
-          rd /s /q "C:\Program Files\Google"
-          rd /s /q "C:\ProgramData\Package Cache"
-          rd /s /q "C:\Windows\Installer"
-          rd /s /q "C:\Windows\SoftwareDistribution"
-          rd /s /q "C:\Windows\Temp"
-          rd /s /q "C:\Windows\Prefetch"
-          rd /s /q "C:\Windows\Panther"
-          rd /s /q "C:\Windows\Logs"
-          rd /s /q "C:\Windows\Help"
-          rd /s /q "C:\Windows\LiveKernelReports"
-          rd /s /q "C:\Users\runneradmin\.nuget"
-          rd /s /q "C:\Users\runneradmin\.m2"
-          rd /s /q "C:\Users\runneradmin\.gradle"
-          rd /s /q "C:\Users\runneradmin\.android"
-          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp"
-          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader"
-          rd /s /q "C:\ProgramData\Microsoft\Windows\WER"
           exit
           "@
           Set-Content -Path "C:\fast_delete.bat" -Value $batContent
           
-          # CMD'yi arka planda başlat
-          $p = Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -PassThru
+          # KESİNLİKLE ZORLA KAPATMA YOK. Sadece -Wait ile bitmesini bekliyoruz. (Süreç 2-3 dakikada bitecek)
+          Write-Host "Silme islemleri yapiliyor. Robocopy kullanildigi icin cok hizli bitecek..."
+          Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -Wait
           
-          # Tam 210 Saniye (3.5 Dakika) bekle. Robocopy ana alanı çoktan açmış olacak.
-          Write-Host "Silme islemleri yapiliyor. Maksimum 3.5 dakika bekleniyor..."
-          Start-Sleep -Seconds 210
-          
-          # 3.5 dakika sonunda hala takılan inatçı dosyalar varsa işlemi zorla kapat
-          if (-not $p.HasExited) {
-              Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-          }
+          # Ekstra temizlikler (Sadece hızlı silinenler)
+          Remove-Item -Path "C:\Program Files\Microsoft SQL Server" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Program Files\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Program Files\MySQL" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Program Files\Android" -Recurse -Force -ErrorAction SilentlyContinue
           
           # Temizlik
           Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
