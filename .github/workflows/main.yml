@@ -65,10 +65,11 @@ jobs:
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
           exit 0
 
-      - name: Dosya Kilitlerini Aç (Servisleri Durdur)
+      - name: Dosya Kilitlerini Aç (EventLog Dahil)
         run: |
           Write-Host "Dosyalari kilitleyen arka plan servisleri durduruluyor..."
-          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv")
+          # EventLog (Windows Olay Günlüğü) servisini de listeye ekledik ki log dosyalarini kilitlmesin
+          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog")
           foreach ($svc in $killerServices) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
@@ -76,12 +77,14 @@ jobs:
           exit 0
 
       # ==========================================
-      # SÜREYİ 2 DAKİKAYA İNDİREN SİLME MOTORU
+      # SÜREYİ 1-2 DAKİKAYA İNDİREN SİLME MOTORU
       # ==========================================
-      - name: HYPERSPEED SİLME (Takeown İptal, Direkt Sil)
+      - name: HYPERSPEED SİLME (Sistem Logları Hariç)
         run: |
-          Write-Host "Hyperspeed silme baslatildi. (Takeown/icacls iptal edildi, dogrudan siliniyor...)"
+          Write-Host "Hyperspeed silme baslatildi. Sistem dosyalari atlaniyor, sadece devasa çöp siliniyor..."
           
+          # System32\LogFiles ve winevt\Logs listesini ÇIKARDIK. 
+          # Çünkü onlar kilitli ve silinmeye çalışıldığında 10 dakika zaman kaybettiriyor.
           $batContent = @"
           @echo off
           rd /s /q "C:\hostedtoolcache"
@@ -104,8 +107,6 @@ jobs:
           rd /s /q "C:\Users\runneradmin\.m2"
           rd /s /q "C:\Users\runneradmin\.gradle"
           rd /s /q "C:\Users\runneradmin\.android"
-          rd /s /q "C:\Windows\System32\LogFiles"
-          rd /s /q "C:\Windows\System32\winevt\Logs"
           rd /s /q "C:\Windows\Temp"
           rd /s /q "C:\Windows\SoftwareDistribution"
           rd /s /q "C:\`$Recycle.Bin"
