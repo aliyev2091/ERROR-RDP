@@ -67,17 +67,23 @@ jobs:
           exit 0
 
       # ==========================================
-      # 2. DOSYALARI KİLİTLEYEN SÜREÇLERİ ZORLA ÖLDÜR (Daha Agresif)
+      # 2. HATA VEREN DOSYALARI KİLİTLEYEN SÜREÇLERİ VE SERVİSLERİ ÖLDÜR
       # ==========================================
-      - name: Dosya Kilitlerini Aç
+      - name: Dosya Kilitlerini Aç (BITS, DoSvc ve Provjobd Dahil)
         run: |
-          Write-Host "Kilitli dosyalari tutan süreçler zorla kapatiliyor..."
+          Write-Host "Kilitli dosyalari tutan süreçler ve servisler zorla kapatiliyor..."
+          
+          # Hata veren dosyalari kilitleyen GitHub ajanini ve Windows indirme servislerini durdur
+          cmd.exe /c "taskkill /F /IM provjobd.exe /T" > $null 2>&1
+          cmd.exe /c "net stop bits /y" > $null 2>&1
+          cmd.exe /c "net stop dosvc /y" > $null 2>&1
+          
           cmd.exe /c "taskkill /F /IM msiexec.exe /T" > $null 2>&1
           cmd.exe /c "taskkill /F /IM ServiceFabricLocalClusterManager.exe /T" > $null 2>&1
           cmd.exe /c "taskkill /F /IM VBCSCompiler.exe /T" > $null 2>&1
           cmd.exe /c "taskkill /F /IM ServiceHub*.exe /T" > $null 2>&1
           
-          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller", "DoSvc", "VSStandardCollector*", "VSStandardCollectorService*")
+          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller", "DoSvc", "VSStandardCollector*")
           foreach ($svc in $killerServices) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
@@ -93,9 +99,6 @@ jobs:
           Write-Host "Silme islemleri baslatiliyor. Disk: $env:DISK_TYPE (Parametre: $mtParam)"
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
-          
-          # ZAMAN KAYBETTİRENLER (ProgramData\VisualStudio, WinSxS, Panther) LİSTEDEN ÇIKARILDI.
-          # Sadece hızlı silinen devasa çöpler var.
           
           # CMD 1: hostedtoolcache
           $bat1 = @"
@@ -141,7 +144,7 @@ jobs:
           "@
           Set-Content -Path "C:\del3.bat" -Value $bat3
 
-          # CMD 4: Temp ve Kullanıcı Çöpleri
+          # CMD 4: Temp ve Kullanıcı Çöpleri (Hata veren Downloader dahil)
           $bat4 = @"
           @echo off
           rd /s /q "C:\Windows\Temp"
