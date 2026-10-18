@@ -79,11 +79,11 @@ jobs:
           exit 0
 
       # ==========================================
-      # İKİ PARALEL CMD İLE SAF HIZ (Hedef 90+ GB)
+      # ZAMAN AŞIMLI HIZLI SİLME (Kesin Çözüm)
       # ==========================================
-      - name: HYPERSPEED SİLME (Çift Çekirdek, Hedef 90+ GB)
+      - name: HYPERSPEED SİLME (Zaman Aşımlı, Hedef 90+ GB)
         run: |
-          Write-Host "Isik hizinda silme baslatildi. Iki farkli CMD penceresi ayni anda siliyor..."
+          Write-Host "Isik hizinda silme baslatildi. 2 CMD penceresi arka planda calisiyor..."
           
           # 1. CMD: Sadece devasa hostedtoolcache klasörünü siler
           $bat1 = @"
@@ -93,7 +93,7 @@ jobs:
           "@
           Set-Content -Path "C:\fast_delete1.bat" -Value $bat1
 
-          # 2. CMD: Visual Studio, Docker, SDK, Edge ve Diğer Tüm Çöpleri Siler
+          # 2. CMD: Diğer tüm büyük çöpleri siler
           $bat2 = @"
           @echo off
           del /f /s /q "C:\Program Files\Microsoft Visual Studio\*.*" > nul 2>&1
@@ -137,14 +137,18 @@ jobs:
           $p1 = Start-Process cmd.exe -ArgumentList "/c C:\fast_delete1.bat" -NoNewWindow -PassThru
           $p2 = Start-Process cmd.exe -ArgumentList "/c C:\fast_delete2.bat" -NoNewWindow -PassThru
           
-          # İkisinin de bitmesini bekle (Süre sınırı YOK, bitene kadar bekler)
-          Wait-Process -Id $p1.Id
-          Wait-Process -Id $p2.Id
+          Write-Host "Silme islemleri basladi. Maksimum 2 dakika bekleniyor..."
+          # KESİN ÇÖZÜM: Maksimum 2 dakika bekle (120 saniye). Daha fazla bekleyip GitHub'i mesgul etme.
+          Start-Sleep -Seconds 120
+          
+          # 2 dakika sonunda hala calisan CMD varsa zorla kapat (Takilmalari onler)
+          Stop-Process -Id $p1.Id -Force -ErrorAction SilentlyContinue
+          Stop-Process -Id $p2.Id -Force -ErrorAction SilentlyContinue
           
           Remove-Item -Path "C:\fast_delete1.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\fast_delete2.bat" -Force -ErrorAction SilentlyContinue
           
-          Write-Host "Silme islemi tamamlandi!"
+          Write-Host "Silme islemi (2 dakika siniriyla) tamamlandi!"
           exit 0
 
       - name: HAYALET UYGULAMALARI VE KAYIT DEFTERİNİ SİL
