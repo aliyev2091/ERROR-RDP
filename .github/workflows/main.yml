@@ -10,7 +10,7 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. DETAYLI SİSTEM BİLGİLERİ VE KESİN DİSK TESPİTİ
+      # 1. DETAYLI SİSTEM BİLGİLERİ VE DİSK TÜRÜ TESPİTİ
       # ==========================================
       - name: DETAYLI SISTEM DONANIM BILGILERI
         run: |
@@ -81,30 +81,61 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. 4'LÜ PARALEL CMD MOTORU (Zorlamasız, Hızlı)
+      # 3. 4 DAKİKA SINIRLI, HATA VERMEYEN MAKSİMUM TEMİZLİK
       # ==========================================
-      - name: HYPERSPEED SİLME (Maksimum Temizlik)
+      - name: HYPERSPEED SİLME (Zamana Karşı Maksimum Temizlik)
         run: |
-          Write-Host "Silme islemleri 4 farkli CMD penceresinde paralel olarak baslatiliyor..."
+          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:16" }
+          Write-Host "Silme islemleri baslatiliyor. Tespit edilen disk: $env:DISK_TYPE (Robocopy Parametresi: $mtParam)"
           
-          # CMD 1: hostedtoolcache ve Visual Studio (En ağırlar)
-          $bat1 = @"
+          New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
+          
+          # İnatçı dosyalar (WinSxS, Installer vb.) listeye GERİ EKLENDİ.
+          # /R:0 /W:0 sayesinde kilitli dosyalarda anında sıradakine atlayacak, hata vermeyecek.
+          $batContent = @"
           @echo off
+          robocopy C:\empty_dir "C:\hostedtoolcache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\hostedtoolcache"
+          
+          robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Microsoft Visual Studio"
+          
+          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
-          rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
-          exit /b 0
-          "@
-          Set-Content -Path "C:\del1.bat" -Value $bat1
 
-          # CMD 2: Diller, Veritabanları ve Docker
-          $bat2 = @"
-          @echo off
+          robocopy C:\empty_dir "C:\ProgramData\Microsoft\VisualStudio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
+
+          robocopy C:\empty_dir "C:\Program Files\Microsoft SQL Server" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Microsoft SQL Server"
+          
+          robocopy C:\empty_dir "C:\Program Files\Android" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Android"
+          
+          robocopy C:\empty_dir "C:\Program Files\Git" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Git"
+          
+          robocopy C:\empty_dir "C:\Program Files\Docker" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Docker"
+          
+          robocopy C:\empty_dir "C:\ProgramData\Package Cache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\ProgramData\Package Cache"
+          
+          robocopy C:\empty_dir "C:\Windows\Installer" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Windows\Installer"
+          
+          robocopy C:\empty_dir "C:\Windows\SoftwareDistribution" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Windows\SoftwareDistribution"
+
+          robocopy C:\empty_dir "C:\Program Files\Google" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files\Google"
+
+          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft\Edge" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
+          
+          robocopy C:\empty_dir "C:\Windows\WinSxS\Backup" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Windows\WinSxS\Backup"
+          
           rd /s /q "C:\Program Files\PostgreSQL"
           rd /s /q "C:\Program Files\MySQL"
           rd /s /q "C:\Program Files\R"
@@ -115,26 +146,10 @@ jobs:
           rd /s /q "C:\Program Files\Azure"
           rd /s /q "C:\ProgramData\Docker"
           rd /s /q "C:\ProgramData\chocolatey"
-          exit /b 0
-          "@
-          Set-Content -Path "C:\del2.bat" -Value $bat2
-
-          # CMD 3: Tarayıcılar, Önbellekler ve Temp
-          $bat3 = @"
-          @echo off
-          rd /s /q "C:\ProgramData\Package Cache"
-          rd /s /q "C:\Windows\SoftwareDistribution"
-          rd /s /q "C:\Program Files\Google"
-          rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
           rd /s /q "C:\Windows\Temp"
           rd /s /q "C:\Windows\Prefetch"
-          exit /b 0
-          "@
-          Set-Content -Path "C:\del3.bat" -Value $bat3
-
-          # CMD 4: Kullanıcı Önbellekleri
-          $bat4 = @"
-          @echo off
+          rd /s /q "C:\Windows\Panther"
+          rd /s /q "C:\Windows\Logs"
           rd /s /q "C:\Users\runneradmin\.nuget"
           rd /s /q "C:\Users\runneradmin\.m2"
           rd /s /q "C:\Users\runneradmin\.gradle"
@@ -143,26 +158,27 @@ jobs:
           rd /s /q "C:\ProgramData\Microsoft\Network\Downloader"
           exit /b 0
           "@
-          Set-Content -Path "C:\del4.bat" -Value $bat4
+          Set-Content -Path "C:\fast_delete.bat" -Value $batContent
           
-          # 4 CMD PENCERESİNİ AYNI ANDA BAŞLAT VE BİTMELERİNİ BEKLE (Zorla Kapatma Yok)
-          Write-Host "Paralel silme islemleri yapiliyor. Lutfen bekleyin..."
-          $p1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
-          $p2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
-          $p3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
-          $p4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
+          # Start-Job KULLANIYORUZ Kİ 4 DAKİKA SINIRI KOYABİLELİM (Ana işlemi öldürmeden)
+          $job = Start-Job -ScriptBlock {
+            cmd.exe /c "C:\fast_delete.bat" > $null 2>&1
+          }
           
-          # İşlemlerin bitmesini bekle (İşlemler zaten hızlı bitecek)
-          $p1.WaitForExit()
-          $p2.WaitForExit()
-          $p3.WaitForExit()
-          $p4.WaitForExit()
+          Write-Host "Silme islemleri yapiliyor. Maksimum 4 dakika bekleniyor..."
+          # 240 Saniye (4 Dakika) bekle. 
+          Wait-Job $job -Timeout 240 | Out-Null
+          
+          # Eğer 4 dakikada bitmediyse (kilitli dosyalar yüzünden) işi durdur, sistemi kilitlemesin.
+          if ($job.State -eq 'Running') {
+              Write-Host "4 dakika doldu, kalan inatci dosyalar arka planda birakildi. Devam ediliyor..."
+          }
+          Stop-Job $job -ErrorAction SilentlyContinue
+          Remove-Job $job -Force -ErrorAction SilentlyContinue
           
           # Temizlik
-          Remove-Item -Path "C:\del1.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del2.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del3.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del4.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
           exit 0
