@@ -56,7 +56,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 2. DOSYALARI KİLİTLEYEN SÜREÇLERİ ACIMASIZCA ÖLDÜR
+      # 2. DOSYALARI KİLİTLEYEN SÜREÇLERİ ZORLA ÖLDÜR
       # ==========================================
       - name: Dosya Kilitlerini Aç (Agresif Süreç Öldürme)
         run: |
@@ -78,9 +78,9 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. 4 PARALEL CMD (Zorlama Yok, Bitişini Bekle)
+      # 3. 4 PARALEL CMD (Kilitli Dosyalar Hariç, Zaman Sınırı Yok)
       # ==========================================
-      - name: HYPERSPEED SİLME (Hedef 85+ GB, Süre Maks 4 Dk)
+      - name: HYPERSPEED SİLME (Hedef 85+ GB, Maks 4 Dk)
         run: |
           Write-Host "Silme islemleri baslatiliyor. 4 CMD motoru ayni anda calisiyor..."
           
@@ -103,7 +103,6 @@ jobs:
           $bat2 = @"
           @echo off
           rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
-          rd /s /q "C:\Program Files\Microsoft SDKs"
           rd /s /q "C:\Program Files (x86)\Windows Kits"
           rd /s /q "C:\Program Files\Git"
           rd /s /q "C:\Program Files\Microsoft SQL Server"
@@ -131,11 +130,10 @@ jobs:
           rd /s /q "C:\Program Files\Google"
           rd /s /q "C:\ProgramData\Package Cache"
           rd /s /q "C:\Windows\SoftwareDistribution"
-          rd /s /q "C:\Windows\WinSxS\Backup"
           "@
           Set-Content -Path "C:\del3.bat" -Value $bat3
 
-          # CMD 4: Sistem Derinlikleri ve AppData
+          # CMD 4: Sistem Derinlikleri ve AppData (WinSxS ve SDKs ÇIKARILDI)
           $bat4 = @"
           @echo off
           rd /s /q "C:\Windows\Temp"
@@ -152,14 +150,14 @@ jobs:
           "@
           Set-Content -Path "C:\del4.bat" -Value $bat4
           
-          # 4 CMD'yi AYNI ANDA baslat ve bitmelerini bekle (-Wait ile zorla kapatma yok)
-          Write-Host "CMD'ler calisiyor ve bitmesi bekleniyor (Maks 4 dakika)..."
+          # 4 CMD'yi AYNI ANDA baslat
+          Write-Host "CMD'ler calisiyor ve bitmesi bekleniyor..."
           $t1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
           $t2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
           $t3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
           $t4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
           
-          # -Wait komutu işlem bitene kadar bekler. Dışarıdan müdahale (timeout) yok.
+          # Kilitli dosyalar listeden çıkarıldığı için işlem çok hızlı bitecek.
           $t1.WaitForExit()
           $t2.WaitForExit()
           $t3.WaitForExit()
