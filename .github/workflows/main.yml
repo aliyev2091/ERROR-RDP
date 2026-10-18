@@ -28,16 +28,6 @@ jobs:
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
           
-          Write-Host "-----------------------------------------------------------------"
-          Write-Host "[+] Fiziksel Diskler:"
-          $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object FriendlyName, MediaType, BusType, @{Name="SizeGB";Expression={[math]::Round($_.Size/1GB, 2)}}
-          if ($disks) {
-              foreach ($disk in $disks) {
-                  $media = if (-not $disk.MediaType) { "Bilinmiyor" } else { $disk.MediaType }
-                  Write-Host "    -> $($disk.FriendlyName) | Tip: $media | Baglanti: $($disk.BusType) | Boyut: $($disk.SizeGB) GB"
-              }
-          }
-          
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
           $freeGB = [math]::Round($diskC.FreeSpace / 1GB, 2)
           $totalGB = [math]::Round($diskC.Size / 1GB, 2)
@@ -79,76 +69,57 @@ jobs:
           exit 0
 
       # ==========================================
-      # ZAMAN AŞIMLI HIZLI SİLME (Kesin Çözüm)
+      # ÇEKİRDEK MOTOR (4 Paralel İşlem, 3 Dakika Sınırı)
       # ==========================================
-      - name: HYPERSPEED SİLME (Zaman Aşımlı, Hedef 90+ GB)
+      - name: HYPERSPEED SİLME (Çekirdek Motor, Hedef 90+ GB)
         run: |
-          Write-Host "Isik hizinda silme baslatildi. 2 CMD penceresi arka planda calisiyor..."
+          Write-Host "Cekirdek motor baslatildi. 4 farkli islem ayni anda calisiyor..."
           
-          # 1. CMD: Sadece devasa hostedtoolcache klasörünü siler
-          $bat1 = @"
-          @echo off
-          del /f /s /q "C:\hostedtoolcache\*.*" > nul 2>&1
-          rd /s /q "C:\hostedtoolcache" > nul 2>&1
-          "@
-          Set-Content -Path "C:\fast_delete1.bat" -Value $bat1
-
-          # 2. CMD: Diğer tüm büyük çöpleri siler
-          $bat2 = @"
-          @echo off
-          del /f /s /q "C:\Program Files\Microsoft Visual Studio\*.*" > nul 2>&1
-          rd /s /q "C:\Program Files\Microsoft Visual Studio" > nul 2>&1
-          del /f /s /q "C:\Program Files (x86)\Microsoft Visual Studio\*.*" > nul 2>&1
-          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio" > nul 2>&1
-          del /f /s /q "C:\Program Files\Docker\*.*" > nul 2>&1
-          rd /s /q "C:\Program Files\Docker" > nul 2>&1
-          del /f /s /q "C:\ProgramData\Docker\*.*" > nul 2>&1
-          rd /s /q "C:\ProgramData\Docker" > nul 2>&1
-          del /f /s /q "C:\ProgramData\chocolatey\*.*" > nul 2>&1
-          rd /s /q "C:\ProgramData\chocolatey" > nul 2>&1
-          del /f /s /q "C:\Program Files\Microsoft SDKs\*.*" > nul 2>&1
-          rd /s /q "C:\Program Files\Microsoft SDKs" > nul 2>&1
-          del /f /s /q "C:\Program Files (x86)\Windows Kits\*.*" > nul 2>&1
-          rd /s /q "C:\Program Files (x86)\Windows Kits" > nul 2>&1
-          del /f /s /q "C:\Program Files\Android\*.*" > nul 2>&1
-          rd /s /q "C:\Program Files\Android" > nul 2>&1
-          del /f /s /q "C:\Program Files\Java\*.*" > nul 2>&1
-          rd /s /q "C:\Program Files\Java" > nul 2>&1
-          del /f /s /q "C:\Program Files\dotnet\*.*" > nul 2>&1
-          rd /s /q "C:\Program Files\dotnet" > nul 2>&1
-          del /f /s /q "C:\Program Files\Google\*.*" > nul 2>&1
-          rd /s /q "C:\Program Files\Google" > nul 2>&1
-          del /f /s /q "C:\Program Files (x86)\Microsoft\Edge\*.*" > nul 2>&1
-          rd /s /q "C:\Program Files (x86)\Microsoft\Edge" > nul 2>&1
-          del /f /s /q "C:\ProgramData\Package Cache\*.*" > nul 2>&1
-          rd /s /q "C:\ProgramData\Package Cache" > nul 2>&1
-          del /f /s /q "C:\Windows\Installer\*.*" > nul 2>&1
-          rd /s /q "C:\Windows\Installer" > nul 2>&1
-          del /f /s /q "C:\Windows\SoftwareDistribution\*.*" > nul 2>&1
-          rd /s /q "C:\Windows\SoftwareDistribution" > nul 2>&1
-          del /f /s /q "C:\Windows\Temp\*.*" > nul 2>&1
-          rd /s /q "C:\Windows\Temp" > nul 2>&1
-          del /f /s /q "C:\Windows\Prefetch\*.*" > nul 2>&1
-          rd /s /q "C:\Windows\Prefetch" > nul 2>&1
-          "@
-          Set-Content -Path "C:\fast_delete2.bat" -Value $bat2
+          # 1. İşlem: En lanet klasör olan hostedtoolcache'i .NET Directory.Delete ile sil (Maksimum hız)
+          $job1 = Start-Job -ScriptBlock {
+            if (Test-Path "C:\hostedtoolcache") {
+              try { [System.IO.Directory]::Delete("C:\hostedtoolcache", $true) } catch {}
+            }
+          }
           
-          # İki Batch dosyasını aynı anda başlat
-          $p1 = Start-Process cmd.exe -ArgumentList "/c C:\fast_delete1.bat" -NoNewWindow -PassThru
-          $p2 = Start-Process cmd.exe -ArgumentList "/c C:\fast_delete2.bat" -NoNewWindow -PassThru
+          # 2. İşlem: Visual Studio
+          $job2 = Start-Job -ScriptBlock {
+            cmd.exe /c "rd /s /q `"C:\Program Files\Microsoft Visual Studio`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files (x86)\Microsoft Visual Studio`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\ProgramData\Microsoft\VisualStudio`"" > $null 2>&1
+          }
           
-          Write-Host "Silme islemleri basladi. Maksimum 2 dakika bekleniyor..."
-          # KESİN ÇÖZÜM: Maksimum 2 dakika bekle (120 saniye). Daha fazla bekleyip GitHub'i mesgul etme.
-          Start-Sleep -Seconds 120
+          # 3. İşlem: Docker, SDK, Windows Kits
+          $job3 = Start-Job -ScriptBlock {
+            cmd.exe /c "rd /s /q `"C:\Program Files\Microsoft SDKs`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\Docker`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files (x86)\Windows Kits`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\ProgramData\Docker`"" > $null 2>&1
+          }
           
-          # 2 dakika sonunda hala calisan CMD varsa zorla kapat (Takilmalari onler)
-          Stop-Process -Id $p1.Id -Force -ErrorAction SilentlyContinue
-          Stop-Process -Id $p2.Id -Force -ErrorAction SilentlyContinue
+          # 4. İşlem: Windows Installer, Edge, Chrome ve Paket Önbellekleri
+          $job4 = Start-Job -ScriptBlock {
+            cmd.exe /c "rd /s /q `"C:\Windows\Installer`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Windows\SoftwareDistribution`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files (x86)\Microsoft\Edge`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Program Files\Google`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\ProgramData\Package Cache`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\ProgramData\chocolatey`"" > $null 2>&1
+          }
           
-          Remove-Item -Path "C:\fast_delete1.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\fast_delete2.bat" -Force -ErrorAction SilentlyContinue
+          # 4 işlemin bitmesini bekle (Maksimum 180 saniye / 3 dakika)
+          Write-Host "Silme islemleri yapiliyor. Maksimum 3 dakika bekleniyor..."
+          Wait-Job $job1, $job2, $job3, $job4 -Timeout 180 | Out-Null
           
-          Write-Host "Silme islemi (2 dakika siniriyla) tamamlandi!"
+          # 3 dakika sonunda hala calisan varsa zorla kapat
+          Stop-Job $job1, $job2, $job3, $job4 -ErrorAction SilentlyContinue
+          Remove-Job $job1, $job2, $job3, $job4 -Force -ErrorAction SilentlyContinue
+          
+          # Kalan ufak tefekleri temizle
+          cmd.exe /c "rd /s /q `"C:\Windows\Temp`"" > $null 2>&1
+          cmd.exe /c "rd /s /q `"C:\Windows\Prefetch`"" > $null 2>&1
+          
+          Write-Host "Silme islemi tamamlandi!"
           exit 0
 
       - name: HAYALET UYGULAMALARI VE KAYIT DEFTERİNİ SİL
@@ -171,7 +142,6 @@ jobs:
           powercfg -h off
           vssadmin delete shadows /all /quiet
           
-          # Windows Temp klasörünü yeniden oluştur (Silindiği için)
           New-Item -ItemType Directory -Force -Path "C:\Windows\Temp" | Out-Null
           New-Item -ItemType Directory -Force -Path "C:\Windows\Prefetch" | Out-Null
           New-Item -ItemType Directory -Force -Path "C:\Windows\SoftwareDistribution" | Out-Null
