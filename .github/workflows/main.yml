@@ -77,13 +77,13 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. ÇEKİRDEK MOTOR (En Başarılı Yöntem, 180 Saniye Sınırı)
+      # 3. ÇEKİRDEK MOTOR (Başarılı v30'un Aynısı, 240 Saniye Sınırı)
       # ==========================================
-      - name: HYPERSPEED SİLME (Hedef 85+ GB)
+      - name: HYPERSPEED SİLME (Hedef 85+ GB Garantili)
         run: |
           Write-Host "Silme islemleri baslatiliyor. 4 paralel islem calisiyor..."
           
-          # 1. İşlem: hostedtoolcache (.NET ile en hızlısı) ve Visual Studio
+          # 1. İşlem: hostedtoolcache ve Visual Studio (.NET ile en hızlısı)
           $job1 = Start-Job -ScriptBlock {
             if (Test-Path "C:\hostedtoolcache") {
               try { [System.IO.Directory]::Delete("C:\hostedtoolcache", $true) } catch {}
@@ -111,7 +111,7 @@ jobs:
             cmd.exe /c "rd /s /q `"C:\ProgramData\chocolatey`"" > $null 2>&1
           }
           
-          # 3. İşlem: Tarayıcılar, Installer ve Sistem Çöpleri
+          # 3. İşlem: Tarayıcılar, Installer ve Sistem Çöpleri (85 GB için burayı doldurduk)
           $job3 = Start-Job -ScriptBlock {
             cmd.exe /c "rd /s /q `"C:\Program Files (x86)\Microsoft\Edge`"" > $null 2>&1
             cmd.exe /c "rd /s /q `"C:\Program Files\Google`"" > $null 2>&1
@@ -120,7 +120,7 @@ jobs:
             cmd.exe /c "rd /s /q `"C:\Windows\SoftwareDistribution`"" > $null 2>&1
           }
           
-          # 4. İşlem: Sistem Derinlikleri ve AppData (Zaman Kaybettirenler ÇIKARILDI)
+          # 4. İşlem: Sistem Derinlikleri ve AppData Çöpleri (WinSxS ve SDKs ÇIKARILDI)
           $job4 = Start-Job -ScriptBlock {
             cmd.exe /c "rd /s /q `"C:\Windows\Temp`"" > $null 2>&1
             cmd.exe /c "rd /s /q `"C:\Windows\Prefetch`"" > $null 2>&1
@@ -135,11 +135,11 @@ jobs:
             cmd.exe /c "rd /s /q `"C:\ProgramData\Microsoft\Windows\WER`"" > $null 2>&1
           }
           
-          # 180 Saniye (3 Dakika) bekle. Bu süre 84 GB alanı açmak için fazlasıyla yeterli.
-          Write-Host "Silme islemleri yapiliyor. Maksimum 3 dakika bekleniyor..."
-          Wait-Job $job1, $job2, $job3, $job4 -Timeout 180 | Out-Null
+          # 240 Saniye (4 Dakika) bekle. Süre bitince zorla kapat ki toplam süre 5 dakikayı geçmesin.
+          Write-Host "Silme islemleri yapiliyor. Maksimum 4 dakika bekleniyor..."
+          Wait-Job $job1, $job2, $job3, $job4 -Timeout 240 | Out-Null
           
-          # 3 dakika sonunda zorla kapat (Toplam sürenin 5 dakikayı geçmesini engeller)
+          # 4 dakika sonunda işlemleri zorla kapat
           Stop-Job $job1, $job2, $job3, $job4 -ErrorAction SilentlyContinue
           Remove-Job $job1, $job2, $job3, $job4 -Force -ErrorAction SilentlyContinue
           
@@ -160,9 +160,6 @@ jobs:
           }
           exit 0
 
-      # ==========================================
-      # 4. SANAL BELLEK VE HAZIRDA BEKLETME (Ekstra Alan)
-      # ==========================================
       - name: SANAL BELLEK (PAGEFILE) VE TEMP TEMİZLİĞİ
         run: |
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force
