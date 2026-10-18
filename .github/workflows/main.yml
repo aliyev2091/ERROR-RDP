@@ -65,20 +65,12 @@ jobs:
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
           exit 0
 
-      # ==========================================
-      # DOSYALARI KİLİTLEYEN SÜREÇLERİ ZORLA KAPAT
-      # ==========================================
       - name: Dosya Kilitlerini Aç (Süreçleri ve Servisleri Öldür)
         run: |
           Write-Host "Kilitli dosyalari tutan süreçler zorla kapatiliyor..."
-          
-          # 1. Visual Studio ve SDK'lari kilitleyen süreçleri zorla sonlandir
           $processes = Get-Process | Where-Object { $_.Path -match "Visual Studio|Microsoft SDKs|ServiceFabric|dotnet|java|node|docker|Unity|VBCSCompiler" }
-          foreach ($p in $processes) {
-              Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-          }
+          foreach ($p in $processes) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
           
-          # 2. Log ve dosya kilitlerini tutan servisleri durdur
           $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog")
           foreach ($svc in $killerServices) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
@@ -87,48 +79,61 @@ jobs:
           exit 0
 
       # ==========================================
-      # HEDEF: 90 GB (Takeown İptal, Direkt Sil)
+      # PARALEL SİLME MOTORU (Multithreading)
       # ==========================================
-      - name: HYPERSPEED SİLME (Hedef 90 GB)
+      - name: HYPERSPEED PARALEL SİLME (Hedef 90 GB)
         run: |
-          Write-Host "Hyperspeed silme baslatildi..."
+          Write-Host "Paralel silme motoru baslatildi. Ayni anda birden fazla klasor siliniyor..."
           
+          # İşleri (Jobs) tanımlıyoruz. Aynı anda çalışacaklar.
+          $job1 = Start-Job -ScriptBlock { Remove-Item -Path "C:\hostedtoolcache" -Recurse -Force -ErrorAction SilentlyContinue }
+          $job2 = Start-Job -ScriptBlock { 
+            Remove-Item -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Force -ErrorAction SilentlyContinue 
+            Remove-Item -Path "C:\Program Files (x86)\Microsoft Visual Studio" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -Path "C:\ProgramData\Microsoft\VisualStudio" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          $job3 = Start-Job -ScriptBlock { 
+            Remove-Item -Path "C:\Program Files\Docker" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -Path "C:\ProgramData\Docker" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          $job4 = Start-Job -ScriptBlock { 
+            Remove-Item -Path "C:\Program Files\Microsoft SDKs" -Recurse -Force -ErrorAction SilentlyContinue 
+            Remove-Item -Path "C:\Program Files (x86)\Windows Kits" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -Path "C:\Program Files\Microsoft SQL Server" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          $job5 = Start-Job -ScriptBlock { 
+            Remove-Item -Path "C:\Program Files\Android" -Recurse -Force -ErrorAction SilentlyContinue 
+            Remove-Item -Path "C:\Program Files\Java" -Recurse -Force -ErrorAction SilentlyContinue 
+            Remove-Item -Path "C:\Program Files\nodejs" -Recurse -Force -ErrorAction SilentlyContinue 
+            Remove-Item -Path "C:\Program Files\dotnet" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -Path "C:\ProgramData\chocolatey" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          
+          # Arka planda çalışan işlerin bitmesini bekle
+          Wait-Job $job1, $job2, $job3, $job4, $job5 | Out-Null
+          
+          # İşleri temizle
+          Remove-Job $job1, $job2, $job3, $job4, $job5
+          
+          Write-Host "Paralel silme tamamlandi. Kalan ufak tefek dosyalar siliniyor..."
+          
+          # Diğer gereksiz yerler (Tek tek silinebilir, çok yer kaplamıyorlar)
           $batContent = @"
           @echo off
-          rd /s /q "C:\hostedtoolcache"
-          rd /s /q "C:\Program Files\Microsoft Visual Studio"
-          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
-          rd /s /q "C:\Program Files\Docker"
-          rd /s /q "C:\ProgramData\Docker"
-          rd /s /q "C:\Program Files\Microsoft SQL Server"
-          rd /s /q "C:\Program Files\Android"
-          rd /s /q "C:\Program Files\Java"
-          rd /s /q "C:\Program Files\nodejs"
-          rd /s /q "C:\Program Files\dotnet"
-          rd /s /q "C:\ProgramData\chocolatey"
-          rd /s /q "C:\Program Files\Microsoft SDKs"
-          rd /s /q "C:\Program Files (x86)\Microsoft SDKs"
-          rd /s /q "C:\Program Files (x86)\Windows Kits"
-          rd /s /q "C:\Program Files\Azure"
-          rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
-          rd /s /q "C:\Users\runneradmin\.nuget"
-          rd /s /q "C:\Users\runneradmin\.m2"
-          rd /s /q "C:\Users\runneradmin\.gradle"
-          rd /s /q "C:\Users\runneradmin\.android"
           rd /s /q "C:\Windows\Temp"
           rd /s /q "C:\Windows\SoftwareDistribution"
           rd /s /q "C:\`$Recycle.Bin"
           rd /s /q "C:\Windows\Prefetch"
           rd /s /q "C:\Windows\Installer"
           rd /s /q "C:\ProgramData\Package Cache"
+          rd /s /q "C:\Users\runneradmin\.nuget"
+          rd /s /q "C:\Users\runneradmin\.m2"
+          rd /s /q "C:\Users\runneradmin\.gradle"
+          rd /s /q "C:\Users\runneradmin\.android"
           "@
           Set-Content -Path "C:\hyperspeed_delete.bat" -Value $batContent
-          
           cmd.exe /c "C:\hyperspeed_delete.bat"
           Remove-Item -Path "C:\hyperspeed_delete.bat" -Force -ErrorAction SilentlyContinue
-          
-          Write-Host "WinSxS Backup dogrudan siliniyor..."
-          cmd.exe /c "rd /s /q C:\Windows\WinSxS\Backup" > $null 2>&1
           
           exit 0
 
