@@ -13,7 +13,6 @@ jobs:
       # 1. DETAYLI SİSTEM BİLGİLERİ VE KESİN DİSK TESPİTİ
       # ==========================================
       - name: DETAYLI SISTEM DONANIM BILGILERI
-        id: sys_info
         run: |
           Write-Host "================================================================="
           Write-Host "                 DETAYLI SISTEM BILGILERI                        "
@@ -29,18 +28,12 @@ jobs:
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
           
-          # DİSK TESPİTİ (Kesin WMI Yöntemi)
           $mediaType = "SSD"
           try {
               $diskInfo = Get-CimInstance -ClassName Win32_DiskDrive | Where-Object { $_.Index -eq 0 }
-              if ($diskInfo.Model -match "NVMe|SSD|Solid State") {
-                  $mediaType = "SSD"
-              } elseif ($diskInfo.MediaType -match "Fixed hard disk") {
-                  $mediaType = "HDD"
-              }
-          } catch {
-              $mediaType = "SSD"
-          }
+              if ($diskInfo.Model -match "NVMe|SSD|Solid State") { $mediaType = "SSD" } 
+              elseif ($diskInfo.MediaType -match "Fixed hard disk") { $mediaType = "HDD" }
+          } catch { $mediaType = "SSD" }
           Write-Host "[+] Disk Tipi       : $mediaType"
           
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
@@ -79,12 +72,8 @@ jobs:
           cmd.exe /c "taskkill /F /IM msiexec.exe /T" > $null 2>&1
           cmd.exe /c "taskkill /F /IM ServiceFabricLocalClusterManager.exe /T" > $null 2>&1
           cmd.exe /c "taskkill /F /IM VBCSCompiler.exe /T" > $null 2>&1
-          cmd.exe /c "taskkill /F /IM MSBuild.exe /T" > $null 2>&1
           
-          $processes = Get-Process | Where-Object { $_.Path -match "Visual Studio|ServiceFabric|dotnet|java|node|docker|Unity|git|postgres|mysql" }
-          foreach ($p in $processes) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
-          
-          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller", "DoSvc", "postgresql*", "MySQL*")
+          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller", "DoSvc")
           foreach ($svc in $killerServices) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
@@ -92,58 +81,88 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. .NET ÇEKİRDEK MOTORU (Zaman Sınırı Yok, Zorla Kapatma Yok)
+      # 3. 4'LÜ PARALEL CMD MOTORU (Zorlamasız, Hızlı)
       # ==========================================
-      - name: HYPERSPEED SİLME (Hedef Maksimum Temizlik)
+      - name: HYPERSPEED SİLME (Maksimum Temizlik)
         run: |
-          Write-Host "Silme islemleri .NET Cekirdek Motoru ile baslatiliyor..."
+          Write-Host "Silme islemleri 4 farkli CMD penceresinde paralel olarak baslatiliyor..."
           
-          # Silinecek devasa klasörlerin listesi
-          $foldersToDelete = @(
-            "C:\hostedtoolcache",
-            "C:\Program Files\Microsoft Visual Studio",
-            "C:\Program Files (x86)\Microsoft Visual Studio",
-            "C:\ProgramData\Microsoft\VisualStudio",
-            "C:\Program Files\Microsoft SQL Server",
-            "C:\Program Files\Android",
-            "C:\Program Files\Git",
-            "C:\Program Files\Docker",
-            "C:\ProgramData\Docker",
-            "C:\ProgramData\Package Cache",
-            "C:\Windows\SoftwareDistribution",
-            "C:\Program Files\Google",
-            "C:\Program Files (x86)\Microsoft\Edge",
-            "C:\Program Files\PostgreSQL",
-            "C:\Program Files\MySQL",
-            "C:\Program Files\R",
-            "C:\Program Files\Rtools",
-            "C:\Program Files\nodejs",
-            "C:\Program Files\dotnet",
-            "C:\Program Files\Java",
-            "C:\Program Files\Azure",
-            "C:\ProgramData\chocolatey",
-            "C:\Users\runneradmin\.nuget",
-            "C:\Users\runneradmin\.m2",
-            "C:\Users\runneradmin\.gradle",
-            "C:\Users\runneradmin\.android",
-            "C:\Users\runneradmin\AppData\Local\Temp",
-            "C:\ProgramData\Microsoft\Network\Downloader",
-            "C:\Windows\Temp",
-            "C:\Windows\Prefetch"
-          )
+          # CMD 1: hostedtoolcache ve Visual Studio (En ağırlar)
+          $bat1 = @"
+          @echo off
+          rd /s /q "C:\hostedtoolcache"
+          rd /s /q "C:\Program Files\Microsoft Visual Studio"
+          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
+          rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del1.bat" -Value $bat1
 
-          foreach ($folder in $foldersToDelete) {
-            if (Test-Path $folder) {
-              Write-Host "Siliniyor: $folder"
-              try {
-                # .NET Çekirdek Komutu: Diske sormadan direkt siler. HDD/SSD fark etmez, çok hızlıdır.
-                [System.IO.Directory]::Delete($folder, $true)
-              } catch {
-                # Eğer .NET kilitli bir dosya görürse hata vermesin, CMD ile yedek plan devreye girsin
-                cmd.exe /c "rd /s /q `"$folder`"" > $null 2>&1
-              }
-            }
-          }
+          # CMD 2: Diller, Veritabanları ve Docker
+          $bat2 = @"
+          @echo off
+          rd /s /q "C:\Program Files\Microsoft SQL Server"
+          rd /s /q "C:\Program Files\Android"
+          rd /s /q "C:\Program Files\Git"
+          rd /s /q "C:\Program Files\Docker"
+          rd /s /q "C:\Program Files\PostgreSQL"
+          rd /s /q "C:\Program Files\MySQL"
+          rd /s /q "C:\Program Files\R"
+          rd /s /q "C:\Program Files\Rtools"
+          rd /s /q "C:\Program Files\nodejs"
+          rd /s /q "C:\Program Files\dotnet"
+          rd /s /q "C:\Program Files\Java"
+          rd /s /q "C:\Program Files\Azure"
+          rd /s /q "C:\ProgramData\Docker"
+          rd /s /q "C:\ProgramData\chocolatey"
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del2.bat" -Value $bat2
+
+          # CMD 3: Tarayıcılar, Önbellekler ve Temp
+          $bat3 = @"
+          @echo off
+          rd /s /q "C:\ProgramData\Package Cache"
+          rd /s /q "C:\Windows\SoftwareDistribution"
+          rd /s /q "C:\Program Files\Google"
+          rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
+          rd /s /q "C:\Windows\Temp"
+          rd /s /q "C:\Windows\Prefetch"
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del3.bat" -Value $bat3
+
+          # CMD 4: Kullanıcı Önbellekleri
+          $bat4 = @"
+          @echo off
+          rd /s /q "C:\Users\runneradmin\.nuget"
+          rd /s /q "C:\Users\runneradmin\.m2"
+          rd /s /q "C:\Users\runneradmin\.gradle"
+          rd /s /q "C:\Users\runneradmin\.android"
+          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp"
+          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader"
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del4.bat" -Value $bat4
+          
+          # 4 CMD PENCERESİNİ AYNI ANDA BAŞLAT VE BİTMELERİNİ BEKLE (Zorla Kapatma Yok)
+          Write-Host "Paralel silme islemleri yapiliyor. Lutfen bekleyin..."
+          $p1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
+          $p2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
+          $p3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
+          $p4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
+          
+          # İşlemlerin bitmesini bekle (İşlemler zaten hızlı bitecek)
+          $p1.WaitForExit()
+          $p2.WaitForExit()
+          $p3.WaitForExit()
+          $p4.WaitForExit()
+          
+          # Temizlik
+          Remove-Item -Path "C:\del1.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del2.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del3.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del4.bat" -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
           exit 0
