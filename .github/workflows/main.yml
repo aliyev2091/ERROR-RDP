@@ -61,7 +61,7 @@ jobs:
           $processes = Get-Process | Where-Object { $_.Path -match "Visual Studio|ServiceFabric|dotnet|java|node|docker|Unity|VBCSCompiler|msiexec|VSIXInstaller|Setup" }
           foreach ($p in $processes) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
           
-          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller")
+          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller", "DoSvc")
           foreach ($svc in $killerServices) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
@@ -69,11 +69,11 @@ jobs:
           exit 0
 
       # ==========================================
-      # ÇEKİRDEK MOTOR (5 Paralel İşlem, 2 Dakika Sınırı)
+      # ÇEKİRDEK MOTOR (Derin Temizlik, 2 Dakika Sınırı)
       # ==========================================
-      - name: HYPERSPEED SİLME (Hedef 90+ GB Garantili)
+      - name: HYPERSPEED SİLME (Son Temizlik, Hedef 90+ GB)
         run: |
-          Write-Host "Cekirdek motor baslatildi. Derin temizlik yapiliyor..."
+          Write-Host "Cekirdek motor baslatildi. Son gizli dosyalar siliniyor..."
           
           # 1. İşlem: hostedtoolcache'i .NET Directory.Delete ile sil
           $job1 = Start-Job -ScriptBlock {
@@ -82,7 +82,7 @@ jobs:
             }
           }
           
-          # 2. İşlem: Visual Studio, SDKs ve Windows Kits (90 GB için SDKs eklendi)
+          # 2. İşlem: Visual Studio, SDKs ve Windows Kits
           $job2 = Start-Job -ScriptBlock {
             cmd.exe /c "rd /s /q `"C:\Program Files\Microsoft Visual Studio`"" > $null 2>&1
             cmd.exe /c "rd /s /q `"C:\Program Files (x86)\Microsoft Visual Studio`"" > $null 2>&1
@@ -101,22 +101,27 @@ jobs:
             cmd.exe /c "rd /s /q `"C:\ProgramData\chocolatey`"" > $null 2>&1
           }
           
-          # 4. İşlem: AppData Geliştirici Çöpleri ve Windows Installer (Yeni 10 GB buradan gelecek)
+          # 4. İşlem: AppData Geliştirici Çöpleri, Windows Installer, WinSxS Backup
           $job4 = Start-Job -ScriptBlock {
             cmd.exe /c "rd /s /q `"C:\Users\runneradmin\.nuget`"" > $null 2>&1
             cmd.exe /c "rd /s /q `"C:\Users\runneradmin\.m2`"" > $null 2>&1
             cmd.exe /c "rd /s /q `"C:\Users\runneradmin\.gradle`"" > $null 2>&1
             cmd.exe /c "rd /s /q `"C:\Users\runneradmin\.android`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Users\runneradmin\AppData\Local\Temp`"" > $null 2>&1
             cmd.exe /c "rd /s /q `"C:\Windows\Installer`"" > $null 2>&1
             cmd.exe /c "rd /s /q `"C:\Windows\SoftwareDistribution`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Windows\WinSxS\Backup`"" > $null 2>&1
           }
 
-          # 5. İşlem: WinSxS\Backup (Sistem Güncelleme Yedekleri - Devasa Yer Kaplar)
+          # 5. İşlem: YENİ EKLENEN GİZLİ ÇÖPLER (Delivery Optimization, WER, Loglar, FontCache)
           $job5 = Start-Job -ScriptBlock {
-            cmd.exe /c "rd /s /q `"C:\Windows\WinSxS\Backup`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\ProgramData\Microsoft\Network\Downloader`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\ProgramData\Microsoft\Windows\WER`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Users\runneradmin\AppData\Local\CrashDumps`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Windows\Logs`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Windows\Panther`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Windows\System32\LogFiles`"" > $null 2>&1
+            cmd.exe /c "rd /s /q `"C:\Windows\ServiceProfiles\LocalService\AppData\Local\FontCache`"" > $null 2>&1
             cmd.exe /c "rd /s /q `"C:\Windows\Temp`"" > $null 2>&1
-            cmd.exe /c "rd /s /q `"C:\Windows\Prefetch`"" > $null 2>&1
           }
           
           # 5 işlemin bitmesini bekle (Maksimum 120 saniye / 2 dakika)
