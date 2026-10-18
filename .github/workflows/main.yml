@@ -68,10 +68,10 @@ jobs:
       - name: Dosya Kilitlerini Aç (Süreçleri ve Servisleri Öldür)
         run: |
           Write-Host "Kilitli dosyalari tutan süreçler zorla kapatiliyor..."
-          $processes = Get-Process | Where-Object { $_.Path -match "Visual Studio|Microsoft SDKs|ServiceFabric|dotnet|java|node|docker|Unity|VBCSCompiler" }
+          $processes = Get-Process | Where-Object { $_.Path -match "Visual Studio|Microsoft SDKs|ServiceFabric|dotnet|java|node|docker|Unity|VBCSCompiler|msiexec" }
           foreach ($p in $processes) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
           
-          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog")
+          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller")
           foreach ($svc in $killerServices) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
@@ -79,62 +79,68 @@ jobs:
           exit 0
 
       # ==========================================
-      # PARALEL SİLME MOTORU (Multithreading)
+      # ROBLINUX GİBİ HIZLI SİLME (4 Paralel CMD)
       # ==========================================
-      - name: HYPERSPEED PARALEL SİLME (Hedef 90 GB)
+      - name: HYPERSPEED SİLME (4 Paralel CMD Penceresi)
         run: |
-          Write-Host "Paralel silme motoru baslatildi. Ayni anda birden fazla klasor siliniyor..."
+          Write-Host "4 Farkli CMD penceresi ile paralel silme baslatiliyor..."
           
-          # İşleri (Jobs) tanımlıyoruz. Aynı anda çalışacaklar.
-          $job1 = Start-Job -ScriptBlock { Remove-Item -Path "C:\hostedtoolcache" -Recurse -Force -ErrorAction SilentlyContinue }
-          $job2 = Start-Job -ScriptBlock { 
-            Remove-Item -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Force -ErrorAction SilentlyContinue 
-            Remove-Item -Path "C:\Program Files (x86)\Microsoft Visual Studio" -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item -Path "C:\ProgramData\Microsoft\VisualStudio" -Recurse -Force -ErrorAction SilentlyContinue
-          }
-          $job3 = Start-Job -ScriptBlock { 
-            Remove-Item -Path "C:\Program Files\Docker" -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item -Path "C:\ProgramData\Docker" -Recurse -Force -ErrorAction SilentlyContinue
-          }
-          $job4 = Start-Job -ScriptBlock { 
-            Remove-Item -Path "C:\Program Files\Microsoft SDKs" -Recurse -Force -ErrorAction SilentlyContinue 
-            Remove-Item -Path "C:\Program Files (x86)\Windows Kits" -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item -Path "C:\Program Files\Microsoft SQL Server" -Recurse -Force -ErrorAction SilentlyContinue
-          }
-          $job5 = Start-Job -ScriptBlock { 
-            Remove-Item -Path "C:\Program Files\Android" -Recurse -Force -ErrorAction SilentlyContinue 
-            Remove-Item -Path "C:\Program Files\Java" -Recurse -Force -ErrorAction SilentlyContinue 
-            Remove-Item -Path "C:\Program Files\nodejs" -Recurse -Force -ErrorAction SilentlyContinue 
-            Remove-Item -Path "C:\Program Files\dotnet" -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item -Path "C:\ProgramData\chocolatey" -Recurse -Force -ErrorAction SilentlyContinue
-          }
+          # Bos bir klasor olustur (Silme islemi icin hedef)
+          New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # Arka planda çalışan işlerin bitmesini bekle
-          Wait-Job $job1, $job2, $job3, $job4, $job5 | Out-Null
-          
-          # İşleri temizle
-          Remove-Job $job1, $job2, $job3, $job4, $job5
-          
-          Write-Host "Paralel silme tamamlandi. Kalan ufak tefek dosyalar siliniyor..."
-          
-          # Diğer gereksiz yerler (Tek tek silinebilir, çok yer kaplamıyorlar)
+          # Robocopy komutunu (en hizli silme yontemi) kullanan bir bat dosyasi olustur
           $batContent = @"
           @echo off
+          robocopy C:\empty_dir "C:\hostedtoolcache" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\Docker" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\ProgramData\Docker" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\Microsoft SDKs" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files (x86)\Windows Kits" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\Android" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\Java" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\nodejs" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Program Files\dotnet" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\ProgramData\chocolatey" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Users\runneradmin\.nuget" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Users\runneradmin\.m2" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          robocopy C:\empty_dir "C:\Windows\Temp" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS
+          rd /s /q "C:\hostedtoolcache"
+          rd /s /q "C:\Program Files\Microsoft Visual Studio"
+          rd /s /q "C:\Program Files\Docker"
+          rd /s /q "C:\Program Files\Microsoft SDKs"
           rd /s /q "C:\Windows\Temp"
+          exit
+          "@
+          Set-Content -Path "C:\fast_delete.bat" -Value $batContent
+          
+          # 4 farkli CMD penceresini ayni anda (arka planda) calistir
+          Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow
+          Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow
+          Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow
+          Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow
+          
+          # Arka plan islemlerinin bitmesini bekle
+          Start-Sleep -Seconds 90
+          
+          # Kalan ufak tefek seyleri temizle
+          $batContent2 = @"
+          @echo off
           rd /s /q "C:\Windows\SoftwareDistribution"
           rd /s /q "C:\`$Recycle.Bin"
           rd /s /q "C:\Windows\Prefetch"
           rd /s /q "C:\Windows\Installer"
           rd /s /q "C:\ProgramData\Package Cache"
-          rd /s /q "C:\Users\runneradmin\.nuget"
-          rd /s /q "C:\Users\runneradmin\.m2"
           rd /s /q "C:\Users\runneradmin\.gradle"
           rd /s /q "C:\Users\runneradmin\.android"
           "@
-          Set-Content -Path "C:\hyperspeed_delete.bat" -Value $batContent
-          cmd.exe /c "C:\hyperspeed_delete.bat"
-          Remove-Item -Path "C:\hyperspeed_delete.bat" -Force -ErrorAction SilentlyContinue
+          Set-Content -Path "C:\fast_delete2.bat" -Value $batContent2
+          cmd.exe /c "C:\fast_delete2.bat"
           
+          Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\fast_delete2.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           exit 0
 
       - name: HAYALET UYGULAMALARI VE KAYIT DEFTERİNİ SİL
