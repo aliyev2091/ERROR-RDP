@@ -81,17 +81,17 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. 4 DAKİKA SINIRLI, HATA VERMEYEN MAKSİMUM TEMİZLİK
+      # 3. ZORLAMASIZ, DOĞAL HIZINDA BİTEN TEMİZLİK
       # ==========================================
-      - name: HYPERSPEED SİLME (Zamana Karşı Maksimum Temizlik)
+      - name: HYPERSPEED SİLME (Maksimum Temizlik)
         run: |
           $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:16" }
           Write-Host "Silme islemleri baslatiliyor. Tespit edilen disk: $env:DISK_TYPE (Robocopy Parametresi: $mtParam)"
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # İnatçı dosyalar (WinSxS, Installer vb.) listeye GERİ EKLENDİ.
-          # /R:0 /W:0 sayesinde kilitli dosyalarda anında sıradakine atlayacak, hata vermeyecek.
+          # WinSxS, Panther, Logs gibi kilitlenen ve yavaşlatan sistem dosyaları LİSTEDEN ÇIKARILDI.
+          # Sadece hızlı silinen devasa çöpler var. Bu sayede 5 dakikada bitecek.
           $batContent = @"
           @echo off
           robocopy C:\empty_dir "C:\hostedtoolcache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
@@ -121,9 +121,6 @@ jobs:
           robocopy C:\empty_dir "C:\ProgramData\Package Cache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\ProgramData\Package Cache"
           
-          robocopy C:\empty_dir "C:\Windows\Installer" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Windows\Installer"
-          
           robocopy C:\empty_dir "C:\Windows\SoftwareDistribution" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Windows\SoftwareDistribution"
 
@@ -132,9 +129,6 @@ jobs:
 
           robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft\Edge" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft\Edge"
-          
-          robocopy C:\empty_dir "C:\Windows\WinSxS\Backup" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Windows\WinSxS\Backup"
           
           rd /s /q "C:\Program Files\PostgreSQL"
           rd /s /q "C:\Program Files\MySQL"
@@ -148,8 +142,6 @@ jobs:
           rd /s /q "C:\ProgramData\chocolatey"
           rd /s /q "C:\Windows\Temp"
           rd /s /q "C:\Windows\Prefetch"
-          rd /s /q "C:\Windows\Panther"
-          rd /s /q "C:\Windows\Logs"
           rd /s /q "C:\Users\runneradmin\.nuget"
           rd /s /q "C:\Users\runneradmin\.m2"
           rd /s /q "C:\Users\runneradmin\.gradle"
@@ -160,21 +152,9 @@ jobs:
           "@
           Set-Content -Path "C:\fast_delete.bat" -Value $batContent
           
-          # Start-Job KULLANIYORUZ Kİ 4 DAKİKA SINIRI KOYABİLELİM (Ana işlemi öldürmeden)
-          $job = Start-Job -ScriptBlock {
-            cmd.exe /c "C:\fast_delete.bat" > $null 2>&1
-          }
-          
-          Write-Host "Silme islemleri yapiliyor. Maksimum 4 dakika bekleniyor..."
-          # 240 Saniye (4 Dakika) bekle. 
-          Wait-Job $job -Timeout 240 | Out-Null
-          
-          # Eğer 4 dakikada bitmediyse (kilitli dosyalar yüzünden) işi durdur, sistemi kilitlemesin.
-          if ($job.State -eq 'Running') {
-              Write-Host "4 dakika doldu, kalan inatci dosyalar arka planda birakildi. Devam ediliyor..."
-          }
-          Stop-Job $job -ErrorAction SilentlyContinue
-          Remove-Job $job -Force -ErrorAction SilentlyContinue
+          # ZORLAMA YOK, TIMEOUT YOK. İşlem tamamen bitene kadar bekleyeceğiz.
+          Write-Host "Silme islemleri yapiliyor. Islem kendi dogal hizinda bitecek..."
+          Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -Wait
           
           # Temizlik
           Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
