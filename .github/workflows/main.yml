@@ -28,18 +28,15 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           
-          # UAC'ı Kapat (Tam Yetki)
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
           exit 0
 
       - name: BÜYÜK SÖMÜRÜ (Dosyalar, Kayıt Defteri ve Masaüstü)
         run: |
-          # 1. Masaüstünü ve Hayalet İkonları KÖKTEN SİL
+          # Masaüstü, Hayalet İkonlar ve Programlar
           Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-
-          # 2. Geliştirici Araçlarını ve Program Dosyalarını Sil
           Remove-Item -Path "C:\hostedtoolcache\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\Microsoft Visual Studio\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files (x86)\Microsoft Visual Studio\*" -Recurse -Force -ErrorAction SilentlyContinue
@@ -51,56 +48,45 @@ jobs:
           Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\Unity\*" -Recurse -Force -ErrorAction SilentlyContinue
           
-          # 3. KAYIT DEFTERİNDEN (REGISTRY) HAYALET UYGULAMALARI SİL
-          $uninstallPaths = @(
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
-            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
-            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
-          )
+          # Kayıt Defteri Temizliği
+          $uninstallPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*")
           foreach ($path in $uninstallPaths) {
-            Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object { 
-              $_.DisplayName -match "Chrome|Edge|Unity|Visual Studio|Python|Java|Node" 
-            } | ForEach-Object {
-              Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
-            }
+            Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match "Chrome|Edge|Unity|Visual Studio|Python|Java|Node" } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
           }
 
-          # 4. Windows Mağaza Uygulamalarını Söküp At
           Get-AppxPackage -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue
-          
-          # 5. Hazırda Bekletmeyi Kapat, Gölge Kopyaları ve Geri Dönüşüm Kutusunu Boşalt
           powercfg -h off
           vssadmin delete shadows /all /quiet
           Clear-RecycleBin -Force -ErrorAction SilentlyContinue
           
-          # 6. Tüm Geçici Dosyaları Sil
+          # Geçici Dosyalar
           Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Prefetch\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Installer\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\ProgramData\Package Cache\*" -Recurse -Force -ErrorAction SilentlyContinue
-
-          # 7. Defender'ı Kapat
           Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
           exit 0
 
       - name: 80 GB BARİYERİNİ AŞ (WinSxS ve Pagefile Temizliği)
         run: |
-          Write-Host "Windows'un derinliklerindeki çöpler temizleniyor ve Pagefile kapatılıyor..."
-          
-          # 1. WinSxS (Güncelleme Yedekleri) Temizliği - Devasa Yer Açar
+          Write-Host "Windows'un derinliklerindeki çöpler temizleniyor (DISM)..."
           Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
           
-          # 2. Sanal Bellek (Pagefile) Devre Dışı Bırak
-          $computersys = Get-WmiObject Win32_ComputerSystem -EnableAllPrivileges
-          $computersys.AutomaticManagedPagefile = $False
-          $computersys.Put()
-          $pagefile = Get-WmiObject Win32_PageFileSetting
-          if ($pagefile) { 
-            $pagefile.InitialSize = 0
-            $pagefile.MaximumSize = 0
-            $pagefile.Put() 
+          Write-Host "Sanal Bellek (Pagefile) kapatiliyor..."
+          try {
+            # YENİ NESİL CIM KOMUTLARI (Put() hatasını çözer)
+            $sys = Get-CimInstance -ClassName Win32_ComputerSystem
+            Set-CimInstance -InputObject $sys -Property @{AutomaticManagedPagefile=$false}
+            
+            $pagefile = Get-CimInstance -ClassName Win32_PageFileSetting
+            if ($pagefile) {
+              Set-CimInstance -InputObject $pagefile -Property @{InitialSize=0; MaximumSize=0}
+            }
+            Write-Host "Pagefile basariyla kapatildi."
+          } catch {
+            Write-Host "Pagefile kapatilamadi, ama sorun yok. Devam ediliyor..."
           }
           exit 0
 
@@ -110,9 +96,7 @@ jobs:
           Invoke-WebRequest -Uri $firefoxUrl -OutFile "$env:TEMP\firefox_installer.exe"
           Start-Process -FilePath "$env:TEMP\firefox_installer.exe" -ArgumentList "/S" -Wait
           
-          # Kısayolları Yeniden Oluştur (Her şey silindiği için en son biz ekliyoruz)
           $WshShell = New-Object -ComObject WScript.Shell
-          
           $Shortcut1 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Firefox.lnk")
           $Shortcut1.TargetPath = "C:\Program Files\Mozilla Firefox\firefox.exe"
           $Shortcut1.Save()
@@ -132,17 +116,13 @@ jobs:
           }
           
           powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
-          
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
-          
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
-          
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
-          
           ipconfig /flushdns
           exit 0
 
@@ -155,8 +135,6 @@ jobs:
           tailscale ip -4
           Write-Host "Kullanici Adi : ERROR-4004"
           Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
-          Write-Host "Tarayici      : Firefox"
-          Write-Host "Not: Registry temizlendi, WinSxS sıfırlandı, Pagefile kapatıldı."
           Write-Host "===================================="
           exit 0
           
