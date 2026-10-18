@@ -29,8 +29,13 @@ jobs:
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
           
-          $disk = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object -First 1
-          $mediaType = if ($disk) { $disk.MediaType } else { "SSD" } # Varsayılan SSD
+          # Disk Türünü Tespit Et
+          try {
+              $disk = Get-PhysicalDisk -ErrorAction Stop | Select-Object -First 1
+              $mediaType = $disk.MediaType
+          } catch {
+              $mediaType = "SSD" # Varsayılan olarak SSD kabul et
+          }
           Write-Host "[+] Disk Tipi       : $mediaType"
           
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
@@ -41,10 +46,10 @@ jobs:
           Write-Host "================================================================="
           Write-Host "Hyperspeed temizlik baslatiliyor..."
           
-          if ($mediaType -eq "SSD" -or $mediaType -eq "Unspecified") {
-            echo "DISK_TYPE=SSD" >> $env:GITHUB_ENV
-          } else {
+          if ($mediaType -eq "HDD") {
             echo "DISK_TYPE=HDD" >> $env:GITHUB_ENV
+          } else {
+            echo "DISK_TYPE=SSD" >> $env:GITHUB_ENV
           }
           exit 0
 
@@ -88,16 +93,18 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. SSD/HDD OPTİMİZE TEMİZLİK MOTORU (Zaman Kaybettirenler Çıkarıldı)
+      # 3. SSD/HDD OPTİMİZE, ZORLAMASIZ TEMİZLİK MOTORU
       # ==========================================
       - name: HYPERSPEED SİLME (Hedef 85+ GB)
         run: |
-          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:16" } # HDD için 16 ideal
+          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:16" }
           Write-Host "Silme islemleri baslatiliyor. Tespit edilen disk: $env:DISK_TYPE (Robocopy Parametresi: $mtParam)"
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # DİKKAT: Windows\Panther, Logs ve AppData\Local\Temp gibi kilitli ve yavaşlatan dosyalar çıkarıldı.
+          # İnatçı ve zaman kaybettiren tüm sistem dosyaları listeden ÇIKARILDI.
+          # Sadece hızlı silinen, devasa boyutlu dosyalar bırakıldı.
+          # exit /b 0 sayesinde bir dosya kilitliyse bile hata verip durmayacak, sıradakine geçecek.
           $batContent = @"
           @echo off
           robocopy C:\empty_dir "C:\hostedtoolcache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
@@ -108,9 +115,6 @@ jobs:
           
           robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio"
-          
-          robocopy C:\empty_dir "C:\ProgramData\Microsoft\VisualStudio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\ProgramData\Microsoft\VisualStudio"
 
           robocopy C:\empty_dir "C:\Program Files\Microsoft SQL Server" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Microsoft SQL Server"
@@ -126,9 +130,6 @@ jobs:
           
           robocopy C:\empty_dir "C:\ProgramData\Package Cache" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\ProgramData\Package Cache"
-          
-          robocopy C:\empty_dir "C:\Windows\Installer" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Windows\Installer"
           
           robocopy C:\empty_dir "C:\Windows\SoftwareDistribution" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Windows\SoftwareDistribution"
@@ -155,16 +156,19 @@ jobs:
           rd /s /q "C:\Users\runneradmin\.m2"
           rd /s /q "C:\Users\runneradmin\.gradle"
           rd /s /q "C:\Users\runneradmin\.android"
+          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp"
           rd /s /q "C:\ProgramData\Microsoft\Network\Downloader"
-          rd /s /q "C:\ProgramData\Microsoft\Windows\WER"
+          
+          :: KRİTİK NOKTA: Eğer üstteki komutlar hata verirse bile başarılı say ve devam et.
           exit /b 0
           "@
           Set-Content -Path "C:\fast_delete.bat" -Value $batContent
           
-          # Zorla kapatma YOK. Kilitli dosyalar listeden çıktığı için çok hızlı bitecek.
-          Write-Host "Silme islemleri yapiliyor. Kilitli dosyalar atlandigi icin hizli bitecek..."
+          # -Wait ile işlemin tamamen kendi kendine bitmesini bekliyoruz. ZORLA KAPATMA YOK.
+          Write-Host "Silme islemleri yapiliyor. Robocopy ve CMD motoru calisiyor..."
           Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -Wait
           
+          # Temizlik
           Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           
@@ -197,7 +201,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path "C:\Windows\Temp" | Out-Null
           New-Item -ItemType Directory -Force -Path "C:\Windows\Prefetch" | Out-Null
           New-Item -ItemType Directory -Force -Path "C:\Windows\SoftwareDistribution" | Out-Null
-          New-Item -ItemType Directory -Force -Path "C:\Windows\Installer" | Out-Null
           exit 0
 
       - name: Firefox'u Kur ve Masaüstüne At
