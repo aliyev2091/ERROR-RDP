@@ -10,19 +10,46 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. SİSTEM DONANIM BİLGİLERİ
+      # 1. DETAYLI SİSTEM BİLGİLERİ (Eksikler Tamamlandı)
       # ==========================================
-      - name: SISTEM DONANIM BILGILERI
+      - name: DETAYLI SISTEM DONANIM BILGILERI
         run: |
           Write-Host "================================================================="
-          Write-Host "                 SISTEM DONANIM BILGILERI                        "
+          Write-Host "                 DETAYLI SISTEM BILGILERI                        "
           Write-Host "================================================================="
+          
+          # 1. İşletim Sistemi (OS)
+          $os = Get-CimInstance -ClassName Win32_OperatingSystem
+          Write-Host "[+] Isletim Sistemi : $($os.Caption) (Build: $($os.BuildNumber))"
+          
+          # 2. İşlemci (CPU) ve Çekirdek Sayısı
           $cpu = Get-CimInstance -ClassName Win32_Processor
           Write-Host "[+] Islemci (CPU)   : $($cpu.Name)"
+          Write-Host "    -> Cekirdek      : $($cpu.NumberOfCores) Fiziksel / $($cpu.NumberOfLogicalProcessors) Mantiksal"
+          
+          # 3. RAM Miktarı
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
+          
+          # 4. Fiziksel Disk ve Disk Tipi (SSD/HDD)
+          Write-Host "-----------------------------------------------------------------"
+          Write-Host "[+] Fiziksel Diskler:"
+          $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object FriendlyName, MediaType, BusType, @{Name="SizeGB";Expression={[math]::Round($_.Size/1GB, 2)}}
+          if ($disks) {
+              foreach ($disk in $disks) {
+                  $media = if (-not $disk.MediaType) { "Bilinmiyor" } else { $disk.MediaType }
+                  Write-Host "    -> $($disk.FriendlyName) | Tip: $media | Baglanti: $($disk.BusType) | Boyut: $($disk.SizeGB) GB"
+              }
+          } else {
+              Write-Host "    -> Fiziksel disk bilgisi alinamadi."
+          }
+          
+          # 5. C: Sürücüsü Detayları
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
-          Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
+          $freeGB = [math]::Round($diskC.FreeSpace / 1GB, 2)
+          $totalGB = [math]::Round($diskC.Size / 1GB, 2)
+          Write-Host "-----------------------------------------------------------------"
+          Write-Host "[+] C: Surucusu     : $freeGB GB Bos / $totalGB GB Toplam"
           Write-Host "================================================================="
           exit 0
 
@@ -33,23 +60,17 @@ jobs:
         run: |
           Write-Host "Microsoft Edge ve tum kalintilari siliniyor..."
           
-          # Edge uygulamasını sil (Bir daha açılamasın diye)
           Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
           
-          # Edge kısayollarını her yerden sil
           Remove-Item -Path "C:\Users\Default\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           
-          # Başlat menüsündeki kısayolları temizle
           Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
-          # Görev çubuğundaki varsayılan pinleri (Edge, Explorer vs.) temizle
           Remove-Item -Path "C:\Users\Default\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\ERROR-4004\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
           exit 0
 
       - name: Tailscale'i Başlat
@@ -140,21 +161,17 @@ jobs:
 
           if ($chromePath -ne "") {
               $WshShell = New-Object -ComObject WScript.Shell
-              
-              # ERROR-4004 kullanicisinin masaustune at
               New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
               $Shortcut = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Google Chrome.lnk")
               $Shortcut.TargetPath = $chromePath
               $Shortcut.Save()
               
-              # Genel masaustune de at
               New-Item -ItemType Directory -Force -Path "C:\Users\Public\Desktop" | Out-Null
               $Shortcut2 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Google Chrome.lnk")
               $Shortcut2.TargetPath = $chromePath
               $Shortcut2.Save()
           }
           
-          # Ikonlarin gorunur olmasini sagla
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           exit 0
 
