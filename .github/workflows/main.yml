@@ -22,7 +22,7 @@ jobs:
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
           Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
           Write-Host "================================================================="
-          Write-Host "Paralel CMD motoru ile hizli temizlik baslatiliyor..."
+          Write-Host "Paralel CMD motoru ile en hizli temizlik baslatiliyor..."
           exit 0
 
       - name: Tailscale'i Başlat
@@ -61,7 +61,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. 5 PARALEL CMD MOTORU (Yavaşlatanlar Çıkarıldı)
+      # 3. 5 PARALEL CMD MOTORU (Sadece En Hızlı Silinenler)
       # ==========================================
       - name: HYPERSPEED SİLME (Paralel CMD)
         run: |
@@ -75,7 +75,7 @@ jobs:
           "@
           Set-Content -Path "C:\del1.bat" -Value $bat1
 
-          # CMD 2: Visual Studio (Sistem yedekleri ve SDK'lar çıkarıldı, sadece ana klasör)
+          # CMD 2: Visual Studio (Sadece ana klasör, yavaşlatan Packages vs. çıkarıldı)
           $bat2 = @"
           @echo off
           rd /s /q "C:\Program Files\Microsoft Visual Studio" > nul 2>&1
