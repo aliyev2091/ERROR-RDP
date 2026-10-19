@@ -18,16 +18,13 @@ jobs:
           Write-Host "                 SISTEM DONANIM BILGILERI                        "
           Write-Host "================================================================="
           
-          # 1. İşlemci (CPU)
           $cpu = Get-CimInstance -ClassName Win32_Processor
           Write-Host "[+] Islemci (CPU)   : $($cpu.Name)"
           Write-Host "    -> Cekirdek      : $($cpu.NumberOfCores) Fiziksel / $($cpu.NumberOfLogicalProcessors) Mantiksal"
           
-          # 2. RAM
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
           
-          # 3. Disk Tipi (SSD mi HDD mi?)
           $mediaType = "SSD (Varsayilan)"
           try {
               $diskInfo = Get-CimInstance -ClassName Win32_DiskDrive | Where-Object { $_.Index -eq 0 }
@@ -41,7 +38,6 @@ jobs:
           }
           Write-Host "[+] Disk Tipi       : $mediaType"
           
-          # 4. C: Sürücüsü Detayları
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
           $freeGB = [math]::Round($diskC.FreeSpace / 1GB, 2)
           $totalGB = [math]::Round($diskC.Size / 1GB, 2)
@@ -92,20 +88,16 @@ jobs:
         run: |
           Write-Host "RDP Gecikme ve Ag Optimizasyonlari yapiliyor..."
           
-          # UDP/TCP Hibrit ve Gecikmeyi Sifirlama
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
           
-          # RDP Oturum Zaman Asimlarini Kaldirma (Kesintisiz baglanti)
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "MaxDisconnectionTime" -Value 0 -Type DWord -Force
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "MaxIdleTime" -Value 0 -Type DWord -Force
           
-          # TCP No Delay ve ACK Frekansi (Ping dusurmek icin)
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
           
-          # Ag Sinirlamasini (Network Throttling) Kapatma
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 4294967295 -Type DWord -Force
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "SystemResponsiveness" -Value 0 -ErrorAction SilentlyContinue
           
@@ -113,7 +105,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 4. SİSTEM VE ARAYÜZ HIZLANDIRMA
+      # 4. SİSTEM VE ARAYÜZ HIZLANDIRMA (HATA DÜZELTİLDİ)
       # ==========================================
       - name: Sistem ve Arayuz Hizlandirma Ayarlari
         run: |
@@ -131,8 +123,18 @@ jobs:
           New-Item -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell" -Force -ErrorAction SilentlyContinue | Out-Null
           Set-ItemProperty -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell" -Name "FolderType" -Value "NotSpecified" -ErrorAction SilentlyContinue
           
-          # Arka Plan Uygulamalarinin CPU'yu Kisitlamasini Engelleme (Efficiency Mode Kapatma)
-          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling" -Name "PowerThrottlingOff" -Value 1 -Type DWord -Force
+          # Arka Plan Uygulamalarinin CPU'yu Kisitlamasini Engelleme (Efficiency Mode Kapatma) - HATA DÜZELTİLDİ
+          Write-Host "PowerThrottling ayari yapiliyor..."
+          $ptPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling"
+          try {
+              if (-not (Test-Path $ptPath)) {
+                  New-Item -Path $ptPath -Force -ErrorAction Stop | Out-Null
+              }
+              Set-ItemProperty -Path $ptPath -Name "PowerThrottlingOff" -Value 1 -Type DWord -Force -ErrorAction Stop
+              Write-Host "PowerThrottling basariyla kapatildi."
+          } catch {
+              Write-Host "PowerThrottling ayarlanamadi, ancak sistem devam ediyor..."
+          }
           
           exit 0
 
