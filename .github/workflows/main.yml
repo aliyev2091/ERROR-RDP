@@ -10,46 +10,22 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. DETAYLI SİSTEM BİLGİLERİ (Eksikler Tamamlandı)
+      # 1. DETAYLI SİSTEM BİLGİLERİ
       # ==========================================
       - name: DETAYLI SISTEM DONANIM BILGILERI
         run: |
           Write-Host "================================================================="
           Write-Host "                 DETAYLI SISTEM BILGILERI                        "
           Write-Host "================================================================="
-          
-          # 1. İşletim Sistemi (OS)
           $os = Get-CimInstance -ClassName Win32_OperatingSystem
           Write-Host "[+] Isletim Sistemi : $($os.Caption) (Build: $($os.BuildNumber))"
-          
-          # 2. İşlemci (CPU) ve Çekirdek Sayısı
           $cpu = Get-CimInstance -ClassName Win32_Processor
           Write-Host "[+] Islemci (CPU)   : $($cpu.Name)"
           Write-Host "    -> Cekirdek      : $($cpu.NumberOfCores) Fiziksel / $($cpu.NumberOfLogicalProcessors) Mantiksal"
-          
-          # 3. RAM Miktarı
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
-          
-          # 4. Fiziksel Disk ve Disk Tipi (SSD/HDD)
-          Write-Host "-----------------------------------------------------------------"
-          Write-Host "[+] Fiziksel Diskler:"
-          $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object FriendlyName, MediaType, BusType, @{Name="SizeGB";Expression={[math]::Round($_.Size/1GB, 2)}}
-          if ($disks) {
-              foreach ($disk in $disks) {
-                  $media = if (-not $disk.MediaType) { "Bilinmiyor" } else { $disk.MediaType }
-                  Write-Host "    -> $($disk.FriendlyName) | Tip: $media | Baglanti: $($disk.BusType) | Boyut: $($disk.SizeGB) GB"
-              }
-          } else {
-              Write-Host "    -> Fiziksel disk bilgisi alinamadi."
-          }
-          
-          # 5. C: Sürücüsü Detayları
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
-          $freeGB = [math]::Round($diskC.FreeSpace / 1GB, 2)
-          $totalGB = [math]::Round($diskC.Size / 1GB, 2)
-          Write-Host "-----------------------------------------------------------------"
-          Write-Host "[+] C: Surucusu     : $freeGB GB Bos / $totalGB GB Toplam"
+          Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
           Write-Host "================================================================="
           exit 0
 
@@ -59,18 +35,13 @@ jobs:
       - name: Edge Tarayicisini ve Kisayollarini Komple Sil
         run: |
           Write-Host "Microsoft Edge ve tum kalintilari siliniyor..."
-          
           Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
-          
           Remove-Item -Path "C:\Users\Default\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
           Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\Default\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\ERROR-4004\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" -Recurse -Force -ErrorAction SilentlyContinue
           exit 0
 
       - name: Tailscale'i Başlat
@@ -92,33 +63,50 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. TEMEL PERFORMANS VE SERVİS KAPATMA
+      # 3. TEMEL PERFORMANS VE DOCKER KAPATMA
       # ==========================================
-      - name: Servisleri Kapat ve Ultimate Guc Planini Aktif Et
+      - name: Servisleri Kapat ve Ultimate Guc Planini Zorla
         run: |
-          Write-Host "Gereksiz servisler kapatiliyor..."
-          $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc")
+          Write-Host "Gereksiz servisler ve Docker kapatiliyor..."
+          $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc", "docker")
           foreach ($svc in $services) { 
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue 
           }
+          
+          Write-Host "Ultimate Performance Guc Plani zorla aktif ediliyor..."
           cmd.exe /c "powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           cmd.exe /c "powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
+          $regPowerPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes"
+          if (Test-Path $regPowerPath) {
+              Set-ItemProperty -Path $regPowerPath -Name "ActivePowerScheme" -Value "e9a42b02-d5df-448d-aa00-03f14749eb61" -Force -ErrorAction SilentlyContinue
+          }
           exit 0
 
       # ==========================================
-      # 4. GELİŞMİŞ RDP VE AĞ GECİKMESİNİ DÜŞÜRME
+      # 4. GELİŞMİŞ RDP VE AĞ GECİKMESİNİ DÜŞÜRME (REMOTEFX EKLENDİ)
       # ==========================================
       - name: Gelismis RDP ve Ag Optimizasyonu
         run: |
           Write-Host "RDP Gecikme ve Ag Optimizasyonlari yapiliyor..."
+          # UDP ve TCP Hibrit
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
+          
+          # RemoteFX Görüntü Hızlandırmasını ZORLA (Görüntü yağ gibi akar)
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fEnableRemoteFX" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "EnableUDPTransport" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+          
+          # 60 FPS Kilidi
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "MaxDisconnectionTime" -Value 0 -Type DWord -Force
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "MaxIdleTime" -Value 0 -Type DWord -Force
+          
+          # TCP No Delay ve ACK Frekansi
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
+          
+          # Ağ Sınırlamasını Kapat
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 4294967295 -Type DWord -Force
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "SystemResponsiveness" -Value 0 -ErrorAction SilentlyContinue
           ipconfig /flushdns
@@ -129,14 +117,12 @@ jobs:
       # ==========================================
       - name: Sistem ve Arayuz Hizlandirma Ayarlari
         run: |
-          Write-Host "Windows Arayuzu ve Gezgini hizlandiriliyor..."
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "MinAnimate" -Value "0"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0"
           New-Item -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell" -Force -ErrorAction SilentlyContinue | Out-Null
           Set-ItemProperty -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell" -Name "FolderType" -Value "NotSpecified" -ErrorAction SilentlyContinue
-          
           $ptPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling"
           try {
               if (-not (Test-Path $ptPath)) { New-Item -Path $ptPath -Force -ErrorAction Stop | Out-Null }
@@ -149,7 +135,6 @@ jobs:
       # ==========================================
       - name: Masaustune Sadece Chrome Ekle
         run: |
-          Write-Host "Chrome kisayolu olusturuluyor..."
           $chromePath = ""
           try {
               $appPath = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction Stop
@@ -165,30 +150,35 @@ jobs:
               $Shortcut = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Google Chrome.lnk")
               $Shortcut.TargetPath = $chromePath
               $Shortcut.Save()
-              
               New-Item -ItemType Directory -Force -Path "C:\Users\Public\Desktop" | Out-Null
               $Shortcut2 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Google Chrome.lnk")
               $Shortcut2.TargetPath = $chromePath
               $Shortcut2.Save()
           }
-          
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           exit 0
 
       # ==========================================
-      # 7. GÜVENLİK VE GİZLİLİK - TELEMETRİ KAPATMA
+      # 7. GÜVENLİK VE GİZLİLİK
       # ==========================================
       - name: Guvenlik ve Gizlilik Ayarlari
         run: |
-          Write-Host "Windows Telemetri kapatiliyor..."
           $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
           if (-not (Test-Path $telPath)) { New-Item -Path $telPath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $telPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          $capPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore"
-          if (Test-Path "$capPath\location") { Set-ItemProperty -Path "$capPath\location" -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue }
-          if (Test-Path "$capPath\microphone") { Set-ItemProperty -Path "$capPath\microphone" -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue }
-          if (Test-Path "$capPath\webcam") { Set-ItemProperty -Path "$capPath\webcam" -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue }
+          $stores = @(
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
+              "HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone",
+              "HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone",
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam",
+              "HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam"
+          )
+          foreach ($store in $stores) {
+              if (-not (Test-Path $store)) { New-Item -Path $store -Force -ErrorAction SilentlyContinue | Out-Null }
+              Set-ItemProperty -Path $store -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue
+          }
           
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
@@ -196,7 +186,6 @@ jobs:
 
       - name: SANAL BELLEK (PAGEFILE) VE HAZIRDA BEKLETME
         run: |
-          Write-Host "Sanal bellek ve hazirda bekletme kapatiliyor..."
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force
           powercfg -h off
           vssadmin delete shadows /all /quiet
