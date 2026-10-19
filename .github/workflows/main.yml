@@ -10,7 +10,7 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. DETAYLI SİSTEM BİLGİLERİ
+      # 1. DETAYLI SİSTEM BİLGİLERİ VE DİSK TÜRÜ TESPİTİ
       # ==========================================
       - name: DETAYLI SISTEM DONANIM BILGILERI
         run: |
@@ -26,7 +26,7 @@ jobs:
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
           Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
           Write-Host "================================================================="
-          Write-Host "Hizli temizlik baslatiliyor..."
+          Write-Host "Hizli ve sinirsiz temizlik baslatiliyor..."
           exit 0
 
       - name: Tailscale'i Başlat
@@ -66,16 +66,17 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. 3 DAKİKA KESİN SINIRLI HIZLI SİLME
+      # 3. 6 PARALEL CMD MOTORU (Süre Sınırı Yok)
       # ==========================================
-      - name: HYPERSPEED SİLME (Hız Odaklı)
+      - name: HYPERSPEED SİLME (Saf Hız)
         run: |
-          Write-Host "Silme islemleri baslatiliyor. Maksimum 3 dakika sürecek..."
+          Write-Host "Silme islemleri 6 farkli CMD penceresinde baslatiliyor..."
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # Yavaşlatan takeown, icacls ve disk algılama silindi. Her zaman en hızlı mod (/MT:128) kullanılıyor.
-          
+          # Yavaşlatan sistem dosyaları (WinSxS, Installer, Panther) LİSTEDEN ÇIKARILDI.
+          # Sadece hızlı silinen devasa çöpler var. Hata verse bile işlemi durdurmuyoruz.
+
           # CMD 1: hostedtoolcache (En büyük çöp)
           $bat1 = @"
           @echo off
@@ -85,13 +86,21 @@ jobs:
           "@
           Set-Content -Path "C:\del1.bat" -Value $bat1
 
-          # CMD 2: Visual Studio ve Diller
+          # CMD 2: Visual Studio
           $bat2 = @"
           @echo off
           robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Microsoft Visual Studio" > nul 2>&1
           robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio" > nul 2>&1
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del2.bat" -Value $bat2
+
+          # CMD 3: Diller ve Veritabanları
+          $bat3 = @"
+          @echo off
+          rd /s /q "C:\Program Files\Microsoft SQL Server" > nul 2>&1
           rd /s /q "C:\Program Files\Android" > nul 2>&1
           rd /s /q "C:\Program Files\Git" > nul 2>&1
           rd /s /q "C:\Program Files\Docker" > nul 2>&1
@@ -100,61 +109,67 @@ jobs:
           rd /s /q "C:\Program Files\dotnet" > nul 2>&1
           exit /b 0
           "@
-          Set-Content -Path "C:\del2.bat" -Value $bat2
+          Set-Content -Path "C:\del3.bat" -Value $bat3
 
-          # CMD 3: Veritabanları, Önbellekler ve Update
-          $bat3 = @"
+          # CMD 4: Tarayıcılar ve Önbellekler
+          $bat4 = @"
           @echo off
-          rd /s /q "C:\Program Files\Microsoft SQL Server" > nul 2>&1
           rd /s /q "C:\Program Files\PostgreSQL" > nul 2>&1
           rd /s /q "C:\Program Files\MySQL" > nul 2>&1
           rd /s /q "C:\ProgramData\Package Cache" > nul 2>&1
           rd /s /q "C:\Windows\SoftwareDistribution" > nul 2>&1
           rd /s /q "C:\Program Files\Google" > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft\Edge" > nul 2>&1
-          rd /s /q "C:\ProgramData\Microsoft\VisualStudio" > nul 2>&1
-          rd /s /q "C:\Windows\WinSxS\Backup" > nul 2>&1
           exit /b 0
           "@
-          Set-Content -Path "C:\del3.bat" -Value $bat3
+          Set-Content -Path "C:\del4.bat" -Value $bat4
 
-          # CMD 4: Temp ve Kullanıcı Çöpleri
-          $bat4 = @"
+          # CMD 5: Windows Temp ve Kullanıcı Çöpleri
+          $bat5 = @"
           @echo off
           rd /s /q "C:\Windows\Temp" > nul 2>&1
           rd /s /q "C:\Windows\Prefetch" > nul 2>&1
+          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp" > nul 2>&1
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del5.bat" -Value $bat5
+
+          # CMD 6: Kullanıcı Önbellekleri
+          $bat6 = @"
+          @echo off
           rd /s /q "C:\Users\runneradmin\.nuget" > nul 2>&1
           rd /s /q "C:\Users\runneradmin\.m2" > nul 2>&1
           rd /s /q "C:\Users\runneradmin\.gradle" > nul 2>&1
           rd /s /q "C:\Users\runneradmin\.android" > nul 2>&1
-          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp" > nul 2>&1
-          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader" > nul 2>&1
           exit /b 0
           "@
-          Set-Content -Path "C:\del4.bat" -Value $bat4
+          Set-Content -Path "C:\del6.bat" -Value $bat6
           
-          # 4 CMD PENCERESİNİ AYNI ANDA BAŞLAT
-          Write-Host "4 CMD penceresi paralel olarak calisiyor..."
+          # 6 CMD PENCERESİNİ AYNI ANDA BAŞLAT (SÜRE SINIRI YOK)
+          Write-Host "6 CMD penceresi paralel olarak calisiyor. Islemler tamamen bitene kadar beklenecek..."
           $p1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
           $p2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
           $p3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
           $p4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
+          $p5 = Start-Process cmd.exe -ArgumentList "/c C:\del5.bat" -NoNewWindow -PassThru
+          $p6 = Start-Process cmd.exe -ArgumentList "/c C:\del6.bat" -NoNewWindow -PassThru
           
-          # TAM 180 SANİYE (3 DAKİKA) BEKLE. Bu süre en büyük dosyaları silmek için yeterli.
-          Write-Host "Silme islemleri yapiliyor. Maksimum 3 dakika bekleniyor..."
-          Start-Sleep -Seconds 180
-          
-          # 3 dakika sonunda hala calisan varsa zorla kapat
-          Stop-Process -Id $p1.Id -Force -ErrorAction SilentlyContinue
-          Stop-Process -Id $p2.Id -Force -ErrorAction SilentlyContinue
-          Stop-Process -Id $p3.Id -Force -ErrorAction SilentlyContinue
-          Stop-Process -Id $p4.Id -Force -ErrorAction SilentlyContinue
+          # ZAMAN SINIRI YOK. BİTENE KADAR BEKLİYORUZ.
+          $p1.WaitForExit()
+          $p2.WaitForExit()
+          $p3.WaitForExit()
+          $p4.WaitForExit()
+          $p5.WaitForExit()
+          $p6.WaitForExit()
           
           # Temizlik
           Remove-Item -Path "C:\del1.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\del2.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\del3.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\del4.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del5.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del6.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
@@ -215,7 +230,7 @@ jobs:
       - name: Bağlantı Bilgilerini Göster
         run: |
           Write-Host "===================================="
-          Write-Host "     ERROR-4004 HIZLI TEMİZLİK      "
+          Write-Host "     ERROR-4004 SINIRSIZ TEMİZLİK   "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
