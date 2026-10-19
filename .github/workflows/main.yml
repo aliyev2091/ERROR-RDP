@@ -98,31 +98,39 @@ jobs:
           exit 0
 
       # ==========================================
-      # 5. SÜPER HİLE: GİRİŞ YAPILDIĞI AN KARANLIK MODU ZORLA
+      # 5. SÜPER HİLE: GİRİŞ YAPILDIĞI AN KARANLIK MOD VE DUVAR KAĞIDI
       # ==========================================
-      - name: Karanlik Mod Betigi Olustur ve Kullanici Girisine Sabitle
+      - name: Karanlik Mod ve Duvar Kagidi Betigi Olustur
         run: |
-          Write-Host "Karanlik mod zorlayici betik hazirlaniyor..."
+          Write-Host "Karanlik mod ve duvar kagidi zorlayici betik hazirlaniyor..."
           
-          # 1. Karanlik modu zorlayan ve Explorer'i yeniden baslatan PS1 betigi
-          $darkModeScript = @'
+          # 1. Karanlık duvar kağıdını indir
+          $wallpaperUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2560&auto=format&fit=crop"
+          $wallpaperPath = "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg"
+          Invoke-WebRequest -Uri $wallpaperUrl -OutFile $wallpaperPath -ErrorAction SilentlyContinue
+          
+          # 2. Karanlık modu ve duvar kağıdını zorlayan ve Explorer'i yeniden baslatan PS1 betigi
+          $darkModeScript = @"
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath"
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "10"
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper" -Value "0"
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-          '@
+          "@
           Set-Content -Path "C:\darkmode.ps1" -Value $darkModeScript
           
-          # 2. Bu betigi kullanici girisine (RunOnce) ekle ki RDP ile baglanildiginda calissin
+          # 3. Bu betigi kullanici girisine (RunOnce) ekle
           $runOncePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
           if (-not (Test-Path $runOncePath)) { New-Item -Path $runOncePath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $runOncePath -Name "ForceDarkMode" -Value "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\darkmode.ps1" -Force
           
-          # 3. Mevcut kullanici (Runner) icin de uygula
+          # 4. Mevcut kullanici (Runner) icin de uygula
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath" -ErrorAction SilentlyContinue
           
-          Write-Host "Karanlik mod RDP girisine sabitlendi."
+          Write-Host "Karanlik mod ve duvar kagidi RDP girisine sabitlendi."
           exit 0
 
       # ==========================================
