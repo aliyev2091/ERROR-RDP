@@ -61,15 +61,13 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. 5 PARALEL CMD MOTORU (+4 GB Eklendi)
+      # 3. 5 PARALEL CMD MOTORU (Yavaşlatanlar Çıkarıldı)
       # ==========================================
       - name: HYPERSPEED SİLME (Paralel CMD)
         run: |
           Write-Host "Silme islemleri 5 farkli CMD penceresinde baslatiliyor..."
           
-          New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
-          
-          # CMD 1: hostedtoolcache (En büyük çöp)
+          # CMD 1: hostedtoolcache (En büyük çöp - Tek başına)
           $bat1 = @"
           @echo off
           rd /s /q "C:\hostedtoolcache" > nul 2>&1
@@ -77,14 +75,12 @@ jobs:
           "@
           Set-Content -Path "C:\del1.bat" -Value $bat1
 
-          # CMD 2: Visual Studio, SDKs ve Windows Kits (+2.5 GB)
+          # CMD 2: Visual Studio (Sistem yedekleri ve SDK'lar çıkarıldı, sadece ana klasör)
           $bat2 = @"
           @echo off
           rd /s /q "C:\Program Files\Microsoft Visual Studio" > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio" > nul 2>&1
-          rd /s /q "C:\ProgramData\Microsoft\VisualStudio\Packages" > nul 2>&1
-          rd /s /q "C:\Program Files\Microsoft SDKs" > nul 2>&1
-          rd /s /q "C:\Program Files (x86)\Windows Kits" > nul 2>&1
+          rd /s /q "C:\ProgramData\Microsoft\VisualStudio" > nul 2>&1
           exit /b 0
           "@
           Set-Content -Path "C:\del2.bat" -Value $bat2
@@ -115,23 +111,19 @@ jobs:
           rd /s /q "C:\Program Files (x86)\Microsoft\Edge" > nul 2>&1
           rd /s /q "C:\Windows\Temp" > nul 2>&1
           rd /s /q "C:\Windows\Prefetch" > nul 2>&1
-          rd /s /q "C:\Users\runneradmin\.nuget" > nul 2>&1
-          rd /s /q "C:\Users\runneradmin\.m2" > nul 2>&1
-          rd /s /q "C:\Users\runneradmin\.gradle" > nul 2>&1
-          rd /s /q "C:\Users\runneradmin\.android" > nul 2>&1
-          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp" > nul 2>&1
           rd /s /q "C:\ProgramData\Microsoft\Network\Downloader" > nul 2>&1
           exit /b 0
           "@
           Set-Content -Path "C:\del4.bat" -Value $bat4
 
-          # CMD 5: Windows Derinlikleri (WinSxS ve Help) - Robocopy ile hızlı ve hatasız
+          # CMD 5: Kullanıcı Önbellekleri
           $bat5 = @"
           @echo off
-          robocopy C:\empty_dir "C:\Windows\WinSxS\Backup" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Windows\WinSxS\Backup" > nul 2>&1
-          rd /s /q "C:\Windows\Help" > nul 2>&1
-          rd /s /q "C:\Windows\LiveKernelReports" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\.nuget" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\.m2" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\.gradle" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\.android" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp" > nul 2>&1
           exit /b 0
           "@
           Set-Content -Path "C:\del5.bat" -Value $bat5
@@ -157,7 +149,6 @@ jobs:
           Remove-Item -Path "C:\del3.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\del4.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\del5.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
           exit 0
