@@ -10,41 +10,20 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. SİSTEM DONANIM BİLGİLERİ (CPU, RAM, DİSK)
+      # 1. SİSTEM DONANIM BİLGİLERİ
       # ==========================================
       - name: SISTEM DONANIM BILGILERI
         run: |
           Write-Host "================================================================="
           Write-Host "                 SISTEM DONANIM BILGILERI                        "
           Write-Host "================================================================="
-          
           $cpu = Get-CimInstance -ClassName Win32_Processor
           Write-Host "[+] Islemci (CPU)   : $($cpu.Name)"
-          Write-Host "    -> Cekirdek      : $($cpu.NumberOfCores) Fiziksel / $($cpu.NumberOfLogicalProcessors) Mantiksal"
-          
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
-          
-          $mediaType = "SSD (Varsayilan)"
-          try {
-              $diskInfo = Get-CimInstance -ClassName Win32_DiskDrive | Where-Object { $_.Index -eq 0 }
-              if ($diskInfo.Model -match "NVMe|SSD|Solid State") { $mediaType = "SSD" } 
-              elseif ($diskInfo.MediaType -match "Fixed hard disk") { $mediaType = "HDD" }
-          } catch {
-              try {
-                  $disk = Get-PhysicalDisk -ErrorAction Stop | Select-Object -First 1
-                  $mediaType = $disk.MediaType
-              } catch { $mediaType = "Bilinmiyor" }
-          }
-          Write-Host "[+] Disk Tipi       : $mediaType"
-          
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
-          $freeGB = [math]::Round($diskC.FreeSpace / 1GB, 2)
-          $totalGB = [math]::Round($diskC.Size / 1GB, 2)
-          Write-Host "[+] C: Surucusu     : $freeGB GB Bos / $totalGB GB Toplam"
-          
+          Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
           Write-Host "================================================================="
-          Write-Host "Ultimate Performans ve Baglanti ayarlari baslatiliyor..."
           exit 0
 
       - name: Tailscale'i Başlat
@@ -78,7 +57,9 @@ jobs:
           }
           
           Write-Host "Ultimate Performance Guc Plani aktif ediliyor..."
-          powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+          # Plan yoksa olustur, varsa dogrudan aktif et (Hata onleyici)
+          powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 -ErrorAction SilentlyContinue
+          powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61 -ErrorAction SilentlyContinue
           exit 0
 
       # ==========================================
@@ -87,55 +68,90 @@ jobs:
       - name: Gelismis RDP ve Ag Optimizasyonu
         run: |
           Write-Host "RDP Gecikme ve Ag Optimizasyonlari yapiliyor..."
-          
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
-          
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "MaxDisconnectionTime" -Value 0 -Type DWord -Force
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "MaxIdleTime" -Value 0 -Type DWord -Force
-          
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
-          
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 4294967295 -Type DWord -Force
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "SystemResponsiveness" -Value 0 -ErrorAction SilentlyContinue
-          
           ipconfig /flushdns
           exit 0
 
       # ==========================================
-      # 4. SİSTEM VE ARAYÜZ HIZLANDIRMA (HATA DÜZELTİLDİ)
+      # 4. SİSTEM VE ARAYÜZ HIZLANDIRMA
       # ==========================================
       - name: Sistem ve Arayuz Hizlandirma Ayarlari
         run: |
           Write-Host "Windows Arayuzu ve Gezgini hizlandiriliyor..."
-          
-          # Gorsel Efektleri Kapatma (Animasyonlar vb.)
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "MinAnimate" -Value "0"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
-          
-          # Menu Acilma Hizini Sifirlama (Aninda acilir)
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0"
           
-          # Windows Gezgini (Explorer) Klasor Tarama Gecikmesini Kapatma
           New-Item -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell" -Force -ErrorAction SilentlyContinue | Out-Null
           Set-ItemProperty -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell" -Name "FolderType" -Value "NotSpecified" -ErrorAction SilentlyContinue
           
-          # Arka Plan Uygulamalarinin CPU'yu Kisitlamasini Engelleme (Efficiency Mode Kapatma) - HATA DÜZELTİLDİ
-          Write-Host "PowerThrottling ayari yapiliyor..."
           $ptPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling"
           try {
-              if (-not (Test-Path $ptPath)) {
-                  New-Item -Path $ptPath -Force -ErrorAction Stop | Out-Null
-              }
+              if (-not (Test-Path $ptPath)) { New-Item -Path $ptPath -Force -ErrorAction Stop | Out-Null }
               Set-ItemProperty -Path $ptPath -Name "PowerThrottlingOff" -Value 1 -Type DWord -Force -ErrorAction Stop
-              Write-Host "PowerThrottling basariyla kapatildi."
+          } catch { Write-Host "PowerThrottling ayarlanamadi, devam ediliyor..." }
+          exit 0
+
+      # ==========================================
+      # 5. MASAÜSTÜ TEMİZLİĞİ VE CHROME KISAYOLU
+      # ==========================================
+      - name: Masaustunu Temizle ve Chrome Kisayolu Olustur
+        run: |
+          Write-Host "Masaustu temizleniyor..."
+          Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          Write-Host "Chrome'un gercek yolu bulunuyor ve masaustu kisayolu olusturuluyor..."
+          # Kayit defterinden Chrome'un gercek kurulu oldugu yolu bul (Hata onleyici)
+          $chromePath = ""
+          try {
+              $appPath = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction Stop
+              $chromePath = $appPath."(default)"
           } catch {
-              Write-Host "PowerThrottling ayarlanamadi, ancak sistem devam ediyor..."
+              # Eger bulunamazsa bilinen yollari dene
+              if (Test-Path "C:\Program Files\Google\Chrome\Application\chrome.exe") { $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe" }
+              elseif (Test-Path "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe") { $chromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" }
+          }
+
+          if ($chromePath -ne "") {
+              $WshShell = New-Object -ComObject WScript.Shell
+              $Shortcut = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Google Chrome.lnk")
+              $Shortcut.TargetPath = $chromePath
+              $Shortcut.Save()
+              Write-Host "Chrome kisayolu basariyla olusturuldu: $chromePath"
+          } else {
+              Write-Host "Chrome yolu bulunamadi, kisayol olusturulamadi (Sorun degil)."
           }
           
+          # Masaüstü ikonlarının GÖRÜNÜR olmasını sağla
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          exit 0
+
+      # ==========================================
+      # 6. GÜVENLİK VE GİZLİLİK - TELEMETRİ KAPATMA
+      # ==========================================
+      - name: Guvenlik ve Gizlilik Ayarlari
+        run: |
+          Write-Host "Windows Telemetri kapatiliyor..."
+          $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
+          if (-not (Test-Path $telPath)) { New-Item -Path $telPath -Force -ErrorAction SilentlyContinue | Out-Null }
+          Set-ItemProperty -Path $telPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          
+          Write-Host "Uygulama izinleri kapatiliyor..."
+          $capPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore"
+          if (Test-Path "$capPath\location") { Set-ItemProperty -Path "$capPath\location" -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue }
+          if (Test-Path "$capPath\microphone") { Set-ItemProperty -Path "$capPath\microphone" -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue }
+          if (Test-Path "$capPath\webcam") { Set-ItemProperty -Path "$capPath\webcam" -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue }
           exit 0
 
       - name: SANAL BELLEK (PAGEFILE) VE HAZIRDA BEKLETME
@@ -156,7 +172,7 @@ jobs:
           Write-Host "Kullanici Adi : ERROR-4004"
           Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
           Write-Host "===================================="
-          Write-Host "Sistem tamamen hazir! Baglanabilirsiniz."
+          Write-Host "Sistem hazir! Masaustunde sadece Chrome ve Cop Kutusu var."
           exit 0
           
       - name: Sistemi 60 Saat Boyunca Açık Tut
