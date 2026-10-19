@@ -60,7 +60,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. TEMEL PERFORMANS VE ZORLA ULTIMATE PLAN (WMIC KALDIRILDI)
+      # 3. TEMEL PERFORMANS VE ZORLA ULTIMATE PLAN
       # ==========================================
       - name: Servisleri Kapat ve Ultimate Guc Planini Zorla
         run: |
@@ -72,10 +72,9 @@ jobs:
           }
           
           Write-Host "Ultimate Performance Guc Plani zorla muhurluyor..."
-          # 1. Planı oluştur ve aktif et (wmic olmadan)
           cmd.exe /c "powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           cmd.exe /c "powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
-          # 2. Kayıt defterine mühürle
+          
           $regPowerPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes"
           if (Test-Path $regPowerPath) {
               Set-ItemProperty -Path $regPowerPath -Name "ActivePowerScheme" -Value "e9a42b02-d5df-448d-aa00-03f14749eb61" -Force -ErrorAction SilentlyContinue
@@ -90,19 +89,16 @@ jobs:
           Write-Host "RDP Gecikme ve Ag Optimizasyonlari yapiliyor..."
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
-          # RemoteFX ve UDP Zorlama
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fEnableRemoteFX" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "EnableUDPTransport" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
-          # 60 FPS
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
-          # TCP No Delay (Ping Dusurme)
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
           ipconfig /flushdns
           exit 0
 
       # ==========================================
-      # 5. ZORLA KARANLIK MOD (Yeni Kullanicilar Icin Default'a Yaz)
+      # 5. ZORLA KARANLIK MOD (REG ADD İLE HATA ÖNLENDİ)
       # ==========================================
       - name: Sistem ve Arayuz Hizlandirma (Zorla Karanlik Mod)
         run: |
@@ -114,9 +110,10 @@ jobs:
           # Yeni acilacak ERROR-4004 kullanicisi icin varsayilan profil kayit defterini degistir
           $defaultHive = "C:\Users\Default\NTUSER.DAT"
           if (Test-Path $defaultHive) {
+              # Native reg komutu ile hive yükle ve değerleri yaz (Hata vermez)
               cmd.exe /c "reg load HKU\DefUser `"$defaultHive`"" > $null 2>&1
-              Set-ItemProperty -Path "HKU:\DefUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-              Set-ItemProperty -Path "HKU:\DefUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+              cmd.exe /c "reg add `"HKU\DefUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`" /v AppsUseLightTheme /t REG_DWORD /d 0 /f" > $null 2>&1
+              cmd.exe /c "reg add `"HKU\DefUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`" /v SystemUsesLightTheme /t REG_DWORD /d 0 /f" > $null 2>&1
               cmd.exe /c "reg unload HKU\DefUser" > $null 2>&1
           }
           
@@ -156,7 +153,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. GÜVENLİK, GİZLİLİK VE PAGEFILE KÖKTEN SİLME (WMIC KALDIRILDI)
+      # 7. GÜVENLİK, GİZLİLİK VE PAGEFILE KÖKTEN SİLME
       # ==========================================
       - name: Guvenlik, Gizlilik ve Pagefile Ayarlari
         run: |
@@ -178,12 +175,10 @@ jobs:
           }
           
           Write-Host "Sanal bellek (Pagefile) modern yontemlerle kokten siliniyor..."
-          # WMI yerine CIM kullanarak otomatik yonetimi kapat
           $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
           if ($cs) {
               Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile = $false} -ErrorAction SilentlyContinue
           }
-          # Kayit defterinden PagingFiles'i sifirla
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
           
           powercfg -h off
