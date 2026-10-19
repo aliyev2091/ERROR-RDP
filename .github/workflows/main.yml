@@ -60,7 +60,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. TEMEL PERFORMANS VE ZORLA ULTIMATE PLAN
+      # 3. TEMEL PERFORMANS VE ZORLA ULTIMATE PLAN (WMIC KALDIRILDI)
       # ==========================================
       - name: Servisleri Kapat ve Ultimate Guc Planini Zorla
         run: |
@@ -72,16 +72,14 @@ jobs:
           }
           
           Write-Host "Ultimate Performance Guc Plani zorla muhurluyor..."
-          # 1. Planı oluştur ve aktif et
+          # 1. Planı oluştur ve aktif et (wmic olmadan)
           cmd.exe /c "powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           cmd.exe /c "powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
-          # 2. Kayıt defterine mühürle (Sunucu sıfırlamasın diye)
+          # 2. Kayıt defterine mühürle
           $regPowerPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes"
           if (Test-Path $regPowerPath) {
               Set-ItemProperty -Path $regPowerPath -Name "ActivePowerScheme" -Value "e9a42b02-d5df-448d-aa00-03f14749eb61" -Force -ErrorAction SilentlyContinue
           }
-          # 3. Güç Planını WMI ile zorla değiştir
-          wmic path win32_powerplan where "ElementName='Ultimate Performance'" call Activate > $null 2>&1
           exit 0
 
       # ==========================================
@@ -158,7 +156,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. GÜVENLİK, GİZLİLİK VE PAGEFILE KÖKTEN SİLME
+      # 7. GÜVENLİK, GİZLİLİK VE PAGEFILE KÖKTEN SİLME (WMIC KALDIRILDI)
       # ==========================================
       - name: Guvenlik, Gizlilik ve Pagefile Ayarlari
         run: |
@@ -179,11 +177,14 @@ jobs:
               Set-ItemProperty -Path $store -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue
           }
           
-          Write-Host "Sanal bellek (Pagefile) WMI ile kokten siliniyor..."
-          # Kayit defteri yerine WMI kullanarak Windows'u tamamen devre disi birakmaya zorla
-          wmic computersystem set AutomaticManagedPagefile=False > $null 2>&1
-          wmic pagefileset where name="C:\\pagefile.sys" delete > $null 2>&1
-          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force
+          Write-Host "Sanal bellek (Pagefile) modern yontemlerle kokten siliniyor..."
+          # WMI yerine CIM kullanarak otomatik yonetimi kapat
+          $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+          if ($cs) {
+              Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile = $false} -ErrorAction SilentlyContinue
+          }
+          # Kayit defterinden PagingFiles'i sifirla
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
           
           powercfg -h off
           vssadmin delete shadows /all /quiet
