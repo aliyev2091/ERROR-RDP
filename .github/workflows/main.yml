@@ -27,7 +27,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 2. EDGE TARAYICISINI KÖKÜNDEN SİL
+      # 2. EDGE TARAYICISINI VE KISAYOLLARINI KÖKÜNDEN SİL
       # ==========================================
       - name: Edge Tarayicisini ve Kisayollarini Komple Sil
         run: |
@@ -46,9 +46,6 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
-      # ==========================================
-      # 3. KULLANICIYI OLUŞTUR (KARANLIK MOD İÇİN ÖNCE OLUŞTURMALIYIZ)
-      # ==========================================
       - name: Kullanıcı Oluştur, Full Admin Yap ve RDP'yi Etkinleştir
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
@@ -63,7 +60,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 4. TEMEL PERFORMANS VE ZORLA ULTIMATE PLAN
+      # 3. TEMEL PERFORMANS VE ZORLA ULTIMATE PLAN
       # ==========================================
       - name: Servisleri Kapat ve Ultimate Guc Planini Zorla
         run: |
@@ -78,7 +75,6 @@ jobs:
           cmd.exe /c "powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           cmd.exe /c "powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           
-          # Kayit Defterinden Power Plan'i muhurle (Windows ezemesin diye)
           $regPowerPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes"
           if (Test-Path $regPowerPath) {
               Set-ItemProperty -Path $regPowerPath -Name "ActivePowerScheme" -Value "e9a42b02-d5df-448d-aa00-03f14749eb61" -Force -ErrorAction SilentlyContinue
@@ -86,7 +82,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 5. GELİŞMİŞ RDP VE AĞ GECİKMESİNİ DÜŞÜRME
+      # 4. GELİŞMİŞ RDP VE AĞ GECİKMESİNİ DÜŞÜRME
       # ==========================================
       - name: Gelismis RDP ve Ag Optimizasyonu
         run: |
@@ -102,38 +98,35 @@ jobs:
           exit 0
 
       # ==========================================
-      # 6. KARANLIK MODU KULLANICI PROFILINE ZORLA YAZ
+      # 5. SÜPER HİLE: GİRİŞ YAPILDIĞI AN KARANLIK MODU ZORLA
       # ==========================================
-      - name: Sistem ve Arayuz Hizlandirma (Zorla Karanlik Mod)
+      - name: Karanlik Mod Betigi Olustur ve Kullanici Girisine Sabitle
         run: |
-          Write-Host "Karanlik mod kullanici profiline muhurluyor..."
+          Write-Host "Karanlik mod zorlayici betik hazirlaniyor..."
           
-          # ERROR-4004 kullanicisinin kayit defteri dosyasini yukle ve degistir
-          $userProfile = "C:\Users\ERROR-4004"
-          $ntUserDat = "$userProfile\NTUSER.DAT"
-          
-          if (Test-Path $ntUserDat) {
-              # Profili yükle
-              cmd.exe /c "reg load HKU\TempUser `"$ntUserDat`"" > $null 2>&1
-              
-              # Karanlik mod ayarlarini dogrudan yaz
-              cmd.exe /c "reg add `"HKU\TempUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`" /v AppsUseLightTheme /t REG_DWORD /d 0 /f" > $null 2>&1
-              cmd.exe /c "reg add `"HKU\TempUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`" /v SystemUsesLightTheme /t REG_DWORD /d 0 /f" > $null 2>&1
-              
-              # Profili kaldir
-              cmd.exe /c "reg unload HKU\TempUser" > $null 2>&1
-              Write-Host "Karanlik mod ERROR-4004 profilinde zorla aktif edildi."
-          }
-          
-          # Diger hizlandirmalar
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "MinAnimate" -Value "0"
+          # 1. Karanlik modu zorlayan ve Explorer'i yeniden baslatan PS1 betigi
+          $darkModeScript = @'
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0"
+          Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+          '@
+          Set-Content -Path "C:\darkmode.ps1" -Value $darkModeScript
+          
+          # 2. Bu betigi kullanici girisine (RunOnce) ekle ki RDP ile baglanildiginda calissin
+          $runOncePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
+          if (-not (Test-Path $runOncePath)) { New-Item -Path $runOncePath -Force -ErrorAction SilentlyContinue | Out-Null }
+          Set-ItemProperty -Path $runOncePath -Name "ForceDarkMode" -Value "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\darkmode.ps1" -Force
+          
+          # 3. Mevcut kullanici (Runner) icin de uygula
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          
+          Write-Host "Karanlik mod RDP girisine sabitlendi."
           exit 0
 
       # ==========================================
-      # 7. MASAÜSTÜNE SADECE CHROME EKLE
+      # 6. MASAÜSTÜNE SADECE CHROME EKLE
       # ==========================================
       - name: Masaustune Sadece Chrome Ekle
         run: |
@@ -161,28 +154,24 @@ jobs:
           exit 0
 
       # ==========================================
-      # 8. GÜVENLİK, KAMERA/MİKROFON KÖKTEN KAPATMA VE PAGEFILE SİLME
+      # 7. GÜVENLİK, KAMERA/MİKROFON KÖKTEN KAPATMA VE PAGEFILE (CIM)
       # ==========================================
       - name: Guvenlik, Gizlilik ve Pagefile Ayarlari
         run: |
-          # Telemetri
           $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
           if (-not (Test-Path $telPath)) { New-Item -Path $telPath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $telPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          # KAMERA VE MIKROFONU POLITIKALARLA TAMAMEN KAPAT (HKLM)
           $privacyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy"
           if (-not (Test-Path $privacyPath)) { New-Item -Path $privacyPath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessCamera" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessMicrophone" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          # Pagefile'i CIM ile Kökten Sil (Windows inatla açıyorsa bunu kullan)
-          Write-Host "Sanal bellek (Pagefile) kökten siliniyor..."
+          Write-Host "Sanal bellek (Pagefile) WMI/CIM ile kokten siliniyor..."
           $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
           if ($cs) {
               Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile = $false} -ErrorAction SilentlyContinue
           }
-          # Var olan pagefile ayarlarini sil
           $pageFiles = Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue
           if ($pageFiles) {
               foreach ($pf in $pageFiles) {
