@@ -22,7 +22,7 @@ jobs:
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
           Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
           Write-Host "================================================================="
-          Write-Host "Cekirdek motor ile hizli temizlik baslatiliyor..."
+          Write-Host "Paralel CMD motoru ile hizli temizlik baslatiliyor..."
           exit 0
 
       - name: Tailscale'i Başlat
@@ -61,35 +61,35 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. .NET ÇEKİRDEK MOTORU (Hedef Maksimum Hız)
+      # 3. 4 PARALEL CMD MOTORU (Zaman Sınırı Yok)
       # ==========================================
-      - name: HYPERSPEED SİLME (Saf Hız)
+      - name: HYPERSPEED SİLME (Paralel CMD)
         run: |
-          Write-Host "Silme islemleri baslatiliyor. En agir dosyalar .NET motoru ile siliniyor..."
+          Write-Host "Silme islemleri 4 farkli CMD penceresinde baslatiliyor..."
           
-          # 1. EN AĞIR DOSYALAR İÇİN .NET MOTORU (Saniyeler içinde siler)
-          $heavyFolders = @(
-            "C:\hostedtoolcache",
-            "C:\Program Files\Microsoft Visual Studio",
-            "C:\Program Files (x86)\Microsoft Visual Studio"
-          )
+          # En yavaş ve kilitlenen sistem dosyaları (WinSxS, Panther vb.) listeden ÇIKARILDI.
+          # Sadece devasa ve hızlı silinen çöpler var. Sondaki > nul 2>&1 hataları gizler.
           
-          foreach ($folder in $heavyFolders) {
-            if (Test-Path $folder) {
-              Write-Host "Cekirdek motor ile siliniyor: $folder"
-              try {
-                [System.IO.Directory]::Delete($folder, $true)
-              } catch {
-                # Hata verirse CMD ile arkasindan silmeyi dene
-                cmd.exe /c "rd /s /q `"$folder`"" > $null 2>&1
-              }
-            }
-          }
+          # CMD 1: hostedtoolcache
+          $bat1 = @"
+          @echo off
+          rd /s /q "C:\hostedtoolcache" > nul 2>&1
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del1.bat" -Value $bat1
 
-          # 2. DİĞER ÇÖPLER İÇİN PARALEL CMD MOTORU
-          New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
-          
-          $batContent = @"
+          # CMD 2: Visual Studio
+          $bat2 = @"
+          @echo off
+          rd /s /q "C:\Program Files\Microsoft Visual Studio" > nul 2>&1
+          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio" > nul 2>&1
+          rd /s /q "C:\ProgramData\Microsoft\VisualStudio" > nul 2>&1
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del2.bat" -Value $bat2
+
+          # CMD 3: Diller, Veritabanları, Docker
+          $bat3 = @"
           @echo off
           rd /s /q "C:\Program Files\Microsoft SQL Server" > nul 2>&1
           rd /s /q "C:\Program Files\Android" > nul 2>&1
@@ -100,6 +100,13 @@ jobs:
           rd /s /q "C:\Program Files\dotnet" > nul 2>&1
           rd /s /q "C:\Program Files\PostgreSQL" > nul 2>&1
           rd /s /q "C:\Program Files\MySQL" > nul 2>&1
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del3.bat" -Value $bat3
+
+          # CMD 4: Tarayıcılar, Önbellekler ve Temp
+          $bat4 = @"
+          @echo off
           rd /s /q "C:\ProgramData\Package Cache" > nul 2>&1
           rd /s /q "C:\Windows\SoftwareDistribution" > nul 2>&1
           rd /s /q "C:\Program Files\Google" > nul 2>&1
@@ -114,17 +121,26 @@ jobs:
           rd /s /q "C:\ProgramData\Microsoft\Network\Downloader" > nul 2>&1
           exit /b 0
           "@
-          Set-Content -Path "C:\fast_delete.bat" -Value $batContent
+          Set-Content -Path "C:\del4.bat" -Value $bat4
           
-          Write-Host "Diger copler CMD ile paralel siliniyor..."
-          $p = Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -PassThru
+          # 4 CMD PENCERESİNİ AYNI ANDA BAŞLAT
+          Write-Host "4 CMD penceresi paralel olarak calisiyor. Islemler bitene kadar beklenecek..."
+          $p1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
+          $p2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
+          $p3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
+          $p4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
           
           # ZAMAN SINIRI YOK. BITENE KADAR BEKLE.
-          $p.WaitForExit()
+          $p1.WaitForExit()
+          $p2.WaitForExit()
+          $p3.WaitForExit()
+          $p4.WaitForExit()
           
           # Temizlik
-          Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del1.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del2.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del3.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del4.bat" -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
           exit 0
