@@ -26,6 +26,14 @@ jobs:
           Write-Host "================================================================="
           exit 0
 
+      # ==========================================
+      # 2. VARSAYILAN PROFİL MASAÜSTÜNÜ TEMİZLE (EDGE'İ YOK ET)
+      # ==========================================
+      - name: Varsayilan Profil Masaustunu Temizle
+        run: |
+          Write-Host "Yeni kullanicilara kopyalanacak varsayilan masaustu temizleniyor..."
+          Remove-Item -Path "C:\Users\Default\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
       - name: Tailscale'i Başlat
         uses: tailscale/github-action@v3
         with:
@@ -45,7 +53,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 2. TEMEL PERFORMANS VE SERVİS KAPATMA
+      # 3. TEMEL PERFORMANS VE SERVİS KAPATMA (HATA DÜZELTİLDİ)
       # ==========================================
       - name: Servisleri Kapat ve Ultimate Guc Planini Aktif Et
         run: |
@@ -57,13 +65,13 @@ jobs:
           }
           
           Write-Host "Ultimate Performance Guc Plani aktif ediliyor..."
-          # Plan yoksa olustur, varsa dogrudan aktif et (Hata onleyici)
-          powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 -ErrorAction SilentlyContinue
-          powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61 -ErrorAction SilentlyContinue
+          # Hata vermemesi icin cmd /c ile calistiriyoruz
+          cmd.exe /c "powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
+          cmd.exe /c "powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           exit 0
 
       # ==========================================
-      # 3. GELİŞMİŞ RDP VE AĞ GECİKMESİNİ DÜŞÜRME
+      # 4. GELİŞMİŞ RDP VE AĞ GECİKMESİNİ DÜŞÜRME
       # ==========================================
       - name: Gelismis RDP ve Ag Optimizasyonu
         run: |
@@ -81,7 +89,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 4. SİSTEM VE ARAYÜZ HIZLANDIRMA
+      # 5. SİSTEM VE ARAYÜZ HIZLANDIRMA
       # ==========================================
       - name: Sistem ve Arayuz Hizlandirma Ayarlari
         run: |
@@ -102,35 +110,42 @@ jobs:
           exit 0
 
       # ==========================================
-      # 5. MASAÜSTÜ TEMİZLİĞİ VE CHROME KISAYOLU
+      # 6. MASAÜSTÜ VE GÖREV ÇUBUĞU TEMİZLİĞİ
       # ==========================================
-      - name: Masaustunu Temizle ve Chrome Kisayolu Olustur
+      - name: Masaustunu ve Gorev Cubugunu Temizle
         run: |
           Write-Host "Masaustu temizleniyor..."
           Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           
+          Write-Host "Gorev cubugundaki varsayilan simgeler (Edge vb.) temizleniyor..."
+          # Görev çubuğuna sabitlenmiş varsayılan ikonları sil
+          Remove-Item -Path "C:\Users\ERROR-4004\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" -Recurse -Force -ErrorAction SilentlyContinue
+
           Write-Host "Chrome'un gercek yolu bulunuyor ve masaustu kisayolu olusturuluyor..."
-          # Kayit defterinden Chrome'un gercek kurulu oldugu yolu bul (Hata onleyici)
           $chromePath = ""
           try {
               $appPath = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction Stop
               $chromePath = $appPath."(default)"
           } catch {
-              # Eger bulunamazsa bilinen yollari dene
               if (Test-Path "C:\Program Files\Google\Chrome\Application\chrome.exe") { $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe" }
               elseif (Test-Path "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe") { $chromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" }
           }
 
           if ($chromePath -ne "") {
               $WshShell = New-Object -ComObject WScript.Shell
+              # Public masaustune at (Butun kullanicilar gorur)
               $Shortcut = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Google Chrome.lnk")
               $Shortcut.TargetPath = $chromePath
               $Shortcut.Save()
+              # ERROR-4004 kullanicisinin masaustune de at
+              New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
+              $Shortcut2 = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Google Chrome.lnk")
+              $Shortcut2.TargetPath = $chromePath
+              $Shortcut2.Save()
               Write-Host "Chrome kisayolu basariyla olusturuldu: $chromePath"
-          } else {
-              Write-Host "Chrome yolu bulunamadi, kisayol olusturulamadi (Sorun degil)."
           }
           
           # Masaüstü ikonlarının GÖRÜNÜR olmasını sağla
@@ -138,7 +153,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 6. GÜVENLİK VE GİZLİLİK - TELEMETRİ KAPATMA
+      # 7. GÜVENLİK VE GİZLİLİK - TELEMETRİ KAPATMA
       # ==========================================
       - name: Guvenlik ve Gizlilik Ayarlari
         run: |
@@ -152,6 +167,10 @@ jobs:
           if (Test-Path "$capPath\location") { Set-ItemProperty -Path "$capPath\location" -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue }
           if (Test-Path "$capPath\microphone") { Set-ItemProperty -Path "$capPath\microphone" -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue }
           if (Test-Path "$capPath\webcam") { Set-ItemProperty -Path "$capPath\webcam" -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue }
+          
+          Write-Host "Karanlik mod aktif ediliyor..."
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           exit 0
 
       - name: SANAL BELLEK (PAGEFILE) VE HAZIRDA BEKLETME
