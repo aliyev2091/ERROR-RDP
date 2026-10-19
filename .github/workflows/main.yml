@@ -27,7 +27,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 2. EDGE TARAYICISINI VE KISAYOLLARINI KÖKÜNDEN SİL
+      # 2. EDGE TARAYICISINI KÖKÜNDEN SİL
       # ==========================================
       - name: Edge Tarayicisini ve Kisayollarini Komple Sil
         run: |
@@ -60,7 +60,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. TEMEL PERFORMANS VE ZORLA ULTIMATE PLAN
+      # 3. TEMEL PERFORMANS VE ZORLA ULTIMATE PLAN (KÖKTEN)
       # ==========================================
       - name: Servisleri Kapat ve Ultimate Guc Planini Zorla
         run: |
@@ -75,6 +75,7 @@ jobs:
           cmd.exe /c "powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           cmd.exe /c "powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           
+          # Kayit Defterinden Power Plan'i muhurle (Windows ezemesin diye)
           $regPowerPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes"
           if (Test-Path $regPowerPath) {
               Set-ItemProperty -Path $regPowerPath -Name "ActivePowerScheme" -Value "e9a42b02-d5df-448d-aa00-03f14749eb61" -Force -ErrorAction SilentlyContinue
@@ -98,24 +99,27 @@ jobs:
           exit 0
 
       # ==========================================
-      # 5. ZORLA KARANLIK MOD (REG ADD İLE HATA ÖNLENDİ)
+      # 5. ZORLA KARANLIK MOD (AYARLAR EKRANI DAHİL)
       # ==========================================
       - name: Sistem ve Arayuz Hizlandirma (Zorla Karanlik Mod)
         run: |
-          Write-Host "Karanlik mod varsayilan profile muhurluyor..."
+          Write-Host "Karanlik mod varsayilan profile ve sisteme muhurluyor..."
           # Mevcut kullanici icin
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          # Yeni acilacak ERROR-4004 kullanicisi icin varsayilan profil kayit defterini degistir
+          # Varsayilan Profil (Yeni acilacak ERROR-4004 icin)
           $defaultHive = "C:\Users\Default\NTUSER.DAT"
           if (Test-Path $defaultHive) {
-              # Native reg komutu ile hive yükle ve değerleri yaz (Hata vermez)
               cmd.exe /c "reg load HKU\DefUser `"$defaultHive`"" > $null 2>&1
               cmd.exe /c "reg add `"HKU\DefUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`" /v AppsUseLightTheme /t REG_DWORD /d 0 /f" > $null 2>&1
               cmd.exe /c "reg add `"HKU\DefUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`" /v SystemUsesLightTheme /t REG_DWORD /d 0 /f" > $null 2>&1
               cmd.exe /c "reg unload HKU\DefUser" > $null 2>&1
           }
+          
+          # Sistem genelinde karanlik mod zorlamasi (Politika)
+          $themePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+          if (-not (Test-Path $themePath)) { New-Item -Path $themePath -Force -ErrorAction SilentlyContinue | Out-Null }
           
           # Diger hizlandirmalar
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
@@ -125,7 +129,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 6. MASAÜSTÜNE SADECE CHROME KISAYOLU EKLE
+      # 6. MASAÜSTÜNE SADECE CHROME EKLE
       # ==========================================
       - name: Masaustune Sadece Chrome Ekle
         run: |
@@ -153,14 +157,23 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. GÜVENLİK, GİZLİLİK VE PAGEFILE KÖKTEN SİLME
+      # 7. GÜVENLİK, KAMERA/MİKROFON KÖKTEN KAPATMA VE PAGEFILE
       # ==========================================
       - name: Guvenlik, Gizlilik ve Pagefile Ayarlari
         run: |
+          # Telemetri
           $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
           if (-not (Test-Path $telPath)) { New-Item -Path $telPath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $telPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           
+          # KAMERA VE MIKROFONU POLITIKALARLA TAMAMEN KAPAT (HKLM)
+          $privacyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy"
+          if (-not (Test-Path $privacyPath)) { New-Item -Path $privacyPath -Force -ErrorAction SilentlyContinue | Out-Null }
+          # 2 = Force Deny (Zorla Reddet)
+          Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessCamera" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessMicrophone" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
+          
+          # Eski usul kayit defteri (Yedek)
           $stores = @(
               "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
               "HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
@@ -174,7 +187,7 @@ jobs:
               Set-ItemProperty -Path $store -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue
           }
           
-          Write-Host "Sanal bellek (Pagefile) modern yontemlerle kokten siliniyor..."
+          Write-Host "Sanal bellek (Pagefile) kokten siliniyor..."
           $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
           if ($cs) {
               Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile = $false} -ErrorAction SilentlyContinue
