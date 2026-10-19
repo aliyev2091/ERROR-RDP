@@ -27,7 +27,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 2. EDGE TARAYICISINI KÖKÜNDEN SİL
+      # 2. EDGE TARAYICISINI VE KISAYOLLARINI KÖKÜNDEN SİL
       # ==========================================
       - name: Edge Tarayicisini ve Kisayollarini Komple Sil
         run: |
@@ -98,29 +98,26 @@ jobs:
           exit 0
 
       # ==========================================
-      # 5. DUVAR KAĞIDINI İNDİR VE KARANLIK MODU ZORLA
+      # 5. KARANLIK MOD VE YEREL DÜZ SİYAH DUVAR KAĞIDI
       # ==========================================
-      - name: Duvar Kagidi ve Karanlik Mod Zorlayici
+      - name: Karanlik Mod ve Duz Siyah Duvar Kagidi Zorlayici
         run: |
-          Write-Host "Karanlik duvar kagidi indiriliyor..."
-          $wallpaperUrl = "https://images.unsplash.com/photo-1707402117732-37a50a3aee22?q=80&w=2560&auto=format&fit=crop" 
+          Write-Host "Duz siyah duvar kagidi olusturuluyor..."
           $wallpaperPath = "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg"
           
-          # İndirme işlemi (Hata olursa devam et)
+          # System.Drawing kütüphanesi ile internetten indirmeden, yerel olarak düz siyah bir resim oluşturuyoruz
           try {
-              [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-              Invoke-WebRequest -Uri $wallpaperUrl -OutFile $wallpaperPath -UserAgent "Mozilla/5.0" -ErrorAction Stop
-              Write-Host "Duvar kagidi basariyla indirildi."
-          } catch {
-              Write-Host "Duvar kagidi indirilemedi, varsayilan siyah renk kullanilacak."
-              # Eğer indirme başarısız olursa siyah bir BMP oluştur
               Add-Type -AssemblyName System.Drawing
               $bmp = New-Object System.Drawing.Bitmap 1920, 1080
               $graphics = [System.Drawing.Graphics]::FromImage($bmp)
-              $graphics.Clear([System.Drawing.Color]::FromArgb(30, 30, 30))
-              $bmp.Save("C:\Windows\Web\Wallpaper\dark_wallpaper.jpg", [System.Drawing.Imaging.ImageFormat]::Jpeg)
+              # Göz yormayan çok koyu bir antrasit/siyah ton (R:25, G:25, B:25)
+              $graphics.Clear([System.Drawing.Color]::FromArgb(25, 25, 25))
+              $bmp.Save($wallpaperPath, [System.Drawing.Imaging.ImageFormat]::Jpeg)
               $graphics.Dispose()
               $bmp.Dispose()
+              Write-Host "Duz siyah arka plan basariyla olusturuldu."
+          } catch {
+              Write-Host "Duvar kagidi olusturulamadi, varsayilan siyah kullanilacak."
           }
 
           Write-Host "Karanlik mod ve duvar kagidi betigi hazirlaniyor..."
@@ -131,17 +128,17 @@ jobs:
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
           
           # Duvar Kagidi Ayarlari
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg"
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "10" # Doldur (Fill)
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper" -Value "0"
           
-          # Windows API ile ekrani ANINDA guncelle (En onemli kisim)
+          # Windows API ile ekrani ANINDA guncelle
           `$code = @'
           [DllImport("user32.dll", CharSet = CharSet.Auto)]
           public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
           '@
           `$type = Add-Type -MemberDefinition `$code -Name "Win32" -Namespace Win32Functions -PassThru
-          `$type::SystemParametersInfo(20, 0, "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg", 3)
+          `$type::SystemParametersInfo(20, 0, "$wallpaperPath", 3)
           
           # Explorer'i yeniden baslat
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
@@ -156,10 +153,10 @@ jobs:
           # Mevcut Runner kullanicisi icin de uygula ve aninda guncelle
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg" -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath" -ErrorAction SilentlyContinue
           RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
           
-          Write-Host "Duvar kagidi ve karanlik mod RDP girisine sabitlendi."
+          Write-Host "Islem tamamlandi."
           exit 0
 
       # ==========================================
