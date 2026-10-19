@@ -10,19 +10,45 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. DETAYLI SİSTEM BİLGİLERİ
+      # 1. SİSTEM DONANIM BİLGİLERİ (CPU, RAM, DİSK)
       # ==========================================
-      - name: DETAYLI SISTEM DONANIM BILGILERI
+      - name: SISTEM DONANIM BILGILERI
         run: |
           Write-Host "================================================================="
-          Write-Host "                 DETAYLI SISTEM BILGILERI                        "
+          Write-Host "                 SISTEM DONANIM BILGILERI                        "
           Write-Host "================================================================="
+          
+          # 1. İşlemci (CPU)
           $cpu = Get-CimInstance -ClassName Win32_Processor
           Write-Host "[+] Islemci (CPU)   : $($cpu.Name)"
+          Write-Host "    -> Cekirdek      : $($cpu.NumberOfCores) Fiziksel / $($cpu.NumberOfLogicalProcessors) Mantiksal"
+          
+          # 2. RAM
+          $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
+          Write-Host "[+] RAM Miktari     : $ram GB"
+          
+          # 3. Disk Tipi (SSD mi HDD mi?)
+          $mediaType = "SSD (Varsayilan)"
+          try {
+              $diskInfo = Get-CimInstance -ClassName Win32_DiskDrive | Where-Object { $_.Index -eq 0 }
+              if ($diskInfo.Model -match "NVMe|SSD|Solid State") { $mediaType = "SSD" } 
+              elseif ($diskInfo.MediaType -match "Fixed hard disk") { $mediaType = "HDD" }
+          } catch {
+              try {
+                  $disk = Get-PhysicalDisk -ErrorAction Stop | Select-Object -First 1
+                  $mediaType = $disk.MediaType
+              } catch { $mediaType = "Bilinmiyor" }
+          }
+          Write-Host "[+] Disk Tipi       : $mediaType"
+          
+          # 4. C: Sürücüsü Detayları
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
-          Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
+          $freeGB = [math]::Round($diskC.FreeSpace / 1GB, 2)
+          $totalGB = [math]::Round($diskC.Size / 1GB, 2)
+          Write-Host "[+] C: Surucusu     : $freeGB GB Bos / $totalGB GB Toplam"
+          
           Write-Host "================================================================="
-          Write-Host "HILE MODU PRO: Dinamik Coklu CMD motoru baslatiliyor..."
+          Write-Host "Ultimate Performans ve Baglanti ayarlari baslatiliyor..."
           exit 0
 
       - name: Tailscale'i Başlat
@@ -44,186 +70,91 @@ jobs:
           exit 0
 
       # ==========================================
-      # 2. DOSYALARI KİLİTLEYEN SÜREÇLERİ ÖLDÜR
+      # 2. TEMEL PERFORMANS VE SERVİS KAPATMA
       # ==========================================
-      - name: Dosya Kilitlerini Aç
+      - name: Servisleri Kapat ve Ultimate Guc Planini Aktif Et
         run: |
-          Write-Host "Kilitli dosyalari tutan süreçler kapatiliyor..."
-          cmd.exe /c "taskkill /F /IM provjobd.exe /T" > $null 2>&1
-          cmd.exe /c "net stop bits /y" > $null 2>&1
-          cmd.exe /c "net stop dosvc /y" > $null 2>&1
-          
-          $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller", "DoSvc")
-          foreach ($svc in $killerServices) {
-            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
-          }
-          exit 0
-
-      # ==========================================
-      # 3. DİNAMİK HİLE MODU (Her Klasör İçin Ayrı CMD)
-      # ==========================================
-      - name: HYPERSPEED SİLME (Dinamik Çoklu CMD)
-        run: |
-          Write-Host "Dinamik CMD motoru baslatiliyor. Her buyuk klasor icin ayri pencere acilacak..."
-          
-          $processes = @()
-          $batCount = 0
-
-          # 1. hostedtoolcache İçindeki Dilleri Bul ve Her Biri İçin CMD Aç
-          $cachePath = "C:\hostedtoolcache\windows"
-          if (Test-Path $cachePath) {
-              $langFolders = Get-ChildItem -Path $cachePath -Directory -ErrorAction SilentlyContinue
-              foreach ($lang in $langFolders) {
-                  $batCount++
-                  $batFile = "C:\del_lang_$batCount.bat"
-                  $batContent = "@echo off`nrd /s /q `"$($lang.FullName)`" > nul 2>&1`nexit /b 0"
-                  Set-Content -Path $batFile -Value $batContent
-                  $processes += Start-Process cmd.exe -ArgumentList "/c $batFile" -NoNewWindow -PassThru
-              }
-          } else {
-              # Eğer windows alt klasörü yoksa direkt ana klasörü sil
-              $batCount++
-              $batFile = "C:\del_cache_$batCount.bat"
-              Set-Content -Path $batFile -Value "@echo off`nrd /s /q `"C:\hostedtoolcache`" > nul 2>&1`nexit /b 0"
-              $processes += Start-Process cmd.exe -ArgumentList "/c $batFile" -NoNewWindow -PassThru
-          }
-
-          # 2. Program Files İçindeki En Büyük Uygulamalar İçin CMD Aç
-          $appPaths = @(
-              "C:\Program Files\Microsoft Visual Studio",
-              "C:\Program Files (x86)\Microsoft Visual Studio",
-              "C:\Program Files\Microsoft SDKs",
-              "C:\Program Files (x86)\Windows Kits",
-              "C:\Program Files\Microsoft SQL Server",
-              "C:\Program Files\Android",
-              "C:\Program Files\Git",
-              "C:\Program Files\Docker",
-              "C:\Program Files\Java",
-              "C:\Program Files\nodejs",
-              "C:\Program Files\dotnet",
-              "C:\Program Files\PostgreSQL",
-              "C:\Program Files\MySQL",
-              "C:\Program Files\Google",
-              "C:\Program Files (x86)\Microsoft\Edge",
-              "C:\Program Files\Azure",
-              "C:\Program Files\R",
-              "C:\Program Files\Rtools"
-          )
-
-          foreach ($app in $appPaths) {
-              if (Test-Path $app) {
-                  $batCount++
-                  $batFile = "C:\del_app_$batCount.bat"
-                  $batContent = "@echo off`nrd /s /q `"$app`" > nul 2>&1`nexit /b 0"
-                  Set-Content -Path $batFile -Value $batContent
-                  $processes += Start-Process cmd.exe -ArgumentList "/c $batFile" -NoNewWindow -PassThru
-              }
-          }
-
-          # 3. Kalan Çöpler İçin Tek Bir CMD Aç
-          $batCount++
-          $remainingBat = "C:\del_remaining_$batCount.bat"
-          $remainingContent = @"
-          @echo off
-          rd /s /q "C:\ProgramData\Package Cache" > nul 2>&1
-          rd /s /q "C:\ProgramData\Microsoft\VisualStudio" > nul 2>&1
-          rd /s /q "C:\ProgramData\Docker" > nul 2>&1
-          rd /s /q "C:\ProgramData\chocolatey" > nul 2>&1
-          rd /s /q "C:\Windows\SoftwareDistribution" > nul 2>&1
-          rd /s /q "C:\Windows\Temp" > nul 2>&1
-          rd /s /q "C:\Windows\Prefetch" > nul 2>&1
-          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader" > nul 2>&1
-          rd /s /q "C:\Users\runneradmin\.nuget" > nul 2>&1
-          rd /s /q "C:\Users\runneradmin\.m2" > nul 2>&1
-          rd /s /q "C:\Users\runneradmin\.gradle" > nul 2>&1
-          rd /s /q "C:\Users\runneradmin\.android" > nul 2>&1
-          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp" > nul 2>&1
-          
-          robocopy C:\empty_dir "C:\Windows\WinSxS\Backup" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Windows\WinSxS\Backup" > nul 2>&1
-          exit /b 0
-          "@
-          Set-Content -Path $remainingBat -Value $remainingContent
-          $processes += Start-Process cmd.exe -ArgumentList "/c $remainingBat" -NoNewWindow -PassThru
-          
-          Write-Host "Toplam $($processes.Count) adet CMD penceresi acildi. Hepsini bitmesi bekleniyor..."
-          
-          # TÜM CMD PENCERELERİNİN BİTMESİNİ BEKLE
-          foreach ($p in $processes) {
-              $p.WaitForExit()
-          }
-          
-          # Temizlik
-          Remove-Item -Path "C:\del_*.bat" -Force -ErrorAction SilentlyContinue
-          
-          Write-Host "Silme islemi tamamlandi!"
-          exit 0
-
-      - name: HAYALET UYGULAMALARI VE KAYIT DEFTERİNİ SİL
-        run: |
-          cmd.exe /c "rd /s /q C:\Users\Public\Desktop" > $null 2>&1
-          cmd.exe /c "rd /s /q C:\Users\runneradmin\Desktop" > $null 2>&1
-          cmd.exe /c "rd /s /q C:\Users\ERROR-4004\Desktop" > $null 2>&1
-          New-Item -ItemType Directory -Force -Path "C:\Users\Public\Desktop" | Out-Null
-          New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
-
-          $uninstallPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*")
-          foreach ($path in $uninstallPaths) {
-            Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match "Edge|Chrome|Python|Unity|Visual Studio|Docker" } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
-          }
-          exit 0
-
-      - name: SANAL BELLEK (PAGEFILE) VE TEMP TEMİZLİĞİ
-        run: |
-          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force
-          powercfg -h off
-          vssadmin delete shadows /all /quiet
-          
-          New-Item -ItemType Directory -Force -Path "C:\Windows\Temp" | Out-Null
-          New-Item -ItemType Directory -Force -Path "C:\Windows\Prefetch" | Out-Null
-          New-Item -ItemType Directory -Force -Path "C:\Windows\SoftwareDistribution" | Out-Null
-          exit 0
-
-      - name: Firefox'u Kur ve Masaüstüne At
-        run: |
-          $firefoxUrl = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US"
-          Invoke-WebRequest -Uri $firefoxUrl -OutFile "$env:TEMP\firefox_installer.exe"
-          Start-Process -FilePath "$env:TEMP\firefox_installer.exe" -ArgumentList "/S" -Wait
-          $WshShell = New-Object -ComObject WScript.Shell
-          $Shortcut1 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Firefox.lnk")
-          $Shortcut1.TargetPath = "C:\Program Files\Mozilla Firefox\firefox.exe"
-          $Shortcut1.Save()
-          $Shortcut2 = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Firefox.lnk")
-          $Shortcut2.TargetPath = "C:\Program Files\Mozilla Firefox\firefox.exe"
-          $Shortcut2.Save()
-          exit 0
-
-      - name: Servisleri Kapat ve FULL PERFORMANS
-        run: |
+          Write-Host "Gereksiz servisler kapatiliyor..."
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc")
-          foreach ($svc in $services) { Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue; Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue }
+          foreach ($svc in $services) { 
+            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue 
+          }
+          
+          Write-Host "Ultimate Performance Guc Plani aktif ediliyor..."
           powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+          exit 0
+
+      # ==========================================
+      # 3. GELİŞMİŞ RDP VE AĞ GECİKMESİNİ DÜŞÜRME
+      # ==========================================
+      - name: Gelismis RDP ve Ag Optimizasyonu
+        run: |
+          Write-Host "RDP Gecikme ve Ag Optimizasyonlari yapiliyor..."
+          
+          # UDP/TCP Hibrit ve Gecikmeyi Sifirlama
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
+          
+          # RDP Oturum Zaman Asimlarini Kaldirma (Kesintisiz baglanti)
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "MaxDisconnectionTime" -Value 0 -Type DWord -Force
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "MaxIdleTime" -Value 0 -Type DWord -Force
+          
+          # TCP No Delay ve ACK Frekansi (Ping dusurmek icin)
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
+          
+          # Ag Sinirlamasini (Network Throttling) Kapatma
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 4294967295 -Type DWord -Force
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "SystemResponsiveness" -Value 0 -ErrorAction SilentlyContinue
+          
           ipconfig /flushdns
+          exit 0
+
+      # ==========================================
+      # 4. SİSTEM VE ARAYÜZ HIZLANDIRMA
+      # ==========================================
+      - name: Sistem ve Arayuz Hizlandirma Ayarlari
+        run: |
+          Write-Host "Windows Arayuzu ve Gezgini hizlandiriliyor..."
+          
+          # Gorsel Efektleri Kapatma (Animasyonlar vb.)
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "MinAnimate" -Value "0"
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
+          
+          # Menu Acilma Hizini Sifirlama (Aninda acilir)
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0"
+          
+          # Windows Gezgini (Explorer) Klasor Tarama Gecikmesini Kapatma
+          New-Item -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell" -Force -ErrorAction SilentlyContinue | Out-Null
+          Set-ItemProperty -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell" -Name "FolderType" -Value "NotSpecified" -ErrorAction SilentlyContinue
+          
+          # Arka Plan Uygulamalarinin CPU'yu Kisitlamasini Engelleme (Efficiency Mode Kapatma)
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling" -Name "PowerThrottlingOff" -Value 1 -Type DWord -Force
+          
+          exit 0
+
+      - name: SANAL BELLEK (PAGEFILE) VE HAZIRDA BEKLETME
+        run: |
+          Write-Host "Sanal bellek ve hazirda bekletme kapatiliyor..."
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force
+          powercfg -h off
+          vssadmin delete shadows /all /quiet
           exit 0
 
       - name: Bağlantı Bilgilerini Göster
         run: |
           Write-Host "===================================="
-          Write-Host "     ERROR-4004 HILE MODU PRO        "
+          Write-Host "  ERROR-4004 ULTIMATE PERFORMANS    "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
           Write-Host "Kullanici Adi : ERROR-4004"
           Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
           Write-Host "===================================="
-          $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
-          Write-Host "C: SURUCUSUNDEKI GUNCEL BOS ALAN: $([math]::Round($disk.FreeSpace/1GB,2)) GB"
+          Write-Host "Sistem tamamen hazir! Baglanabilirsiniz."
           exit 0
           
       - name: Sistemi 60 Saat Boyunca Açık Tut
