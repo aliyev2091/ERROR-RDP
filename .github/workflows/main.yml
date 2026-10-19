@@ -22,7 +22,7 @@ jobs:
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
           Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
           Write-Host "================================================================="
-          Write-Host "HILE MODU: Coklu CMD motoru baslatiliyor..."
+          Write-Host "HILE MODU PRO: Dinamik Coklu CMD motoru baslatiliyor..."
           exit 0
 
       - name: Tailscale'i Başlat
@@ -61,76 +61,101 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. 8'Lİ PARALEL CMD MOTORU (Her Gruba Özel)
+      # 3. DİNAMİK HİLE MODU (Her Klasör İçin Ayrı CMD)
       # ==========================================
-      - name: HYPERSPEED SİLME (Hile Modu - 8 CMD)
+      - name: HYPERSPEED SİLME (Dinamik Çoklu CMD)
         run: |
-          Write-Host "Silme islemleri 8 farkli CMD penceresinde baslatiliyor..."
-          New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
+          Write-Host "Dinamik CMD motoru baslatiliyor. Her buyuk klasor icin ayri pencere acilacak..."
           
-          # 1. CMD: hostedtoolcache (En büyük çöp)
-          $bat1 = "@echo off`nrd /s /q `"C:\hostedtoolcache`" > nul 2>&1`nexit /b 0"
-          Set-Content -Path "C:\del1.bat" -Value $bat1
+          $processes = @()
+          $batCount = 0
 
-          # 2. CMD: Visual Studio
-          $bat2 = "@echo off`nrd /s /q `"C:\Program Files\Microsoft Visual Studio`" > nul 2>&1`nrd /s /q `"C:\Program Files (x86)\Microsoft Visual Studio`" > nul 2>&1`nrd /s /q `"C:\ProgramData\Microsoft\VisualStudio`" > nul 2>&1`nexit /b 0"
-          Set-Content -Path "C:\del2.bat" -Value $bat2
+          # 1. hostedtoolcache İçindeki Dilleri Bul ve Her Biri İçin CMD Aç
+          $cachePath = "C:\hostedtoolcache\windows"
+          if (Test-Path $cachePath) {
+              $langFolders = Get-ChildItem -Path $cachePath -Directory -ErrorAction SilentlyContinue
+              foreach ($lang in $langFolders) {
+                  $batCount++
+                  $batFile = "C:\del_lang_$batCount.bat"
+                  $batContent = "@echo off`nrd /s /q `"$($lang.FullName)`" > nul 2>&1`nexit /b 0"
+                  Set-Content -Path $batFile -Value $batContent
+                  $processes += Start-Process cmd.exe -ArgumentList "/c $batFile" -NoNewWindow -PassThru
+              }
+          } else {
+              # Eğer windows alt klasörü yoksa direkt ana klasörü sil
+              $batCount++
+              $batFile = "C:\del_cache_$batCount.bat"
+              Set-Content -Path $batFile -Value "@echo off`nrd /s /q `"C:\hostedtoolcache`" > nul 2>&1`nexit /b 0"
+              $processes += Start-Process cmd.exe -ArgumentList "/c $batFile" -NoNewWindow -PassThru
+          }
 
-          # 3. CMD: Veritabanları (SQL, MySQL, PostgreSQL)
-          $bat3 = "@echo off`nrd /s /q `"C:\Program Files\Microsoft SQL Server`" > nul 2>&1`nrd /s /q `"C:\Program Files\MySQL`" > nul 2>&1`nrd /s /q `"C:\Program Files\PostgreSQL`" > nul 2>&1`nexit /b 0"
-          Set-Content -Path "C:\del3.bat" -Value $bat3
+          # 2. Program Files İçindeki En Büyük Uygulamalar İçin CMD Aç
+          $appPaths = @(
+              "C:\Program Files\Microsoft Visual Studio",
+              "C:\Program Files (x86)\Microsoft Visual Studio",
+              "C:\Program Files\Microsoft SDKs",
+              "C:\Program Files (x86)\Windows Kits",
+              "C:\Program Files\Microsoft SQL Server",
+              "C:\Program Files\Android",
+              "C:\Program Files\Git",
+              "C:\Program Files\Docker",
+              "C:\Program Files\Java",
+              "C:\Program Files\nodejs",
+              "C:\Program Files\dotnet",
+              "C:\Program Files\PostgreSQL",
+              "C:\Program Files\MySQL",
+              "C:\Program Files\Google",
+              "C:\Program Files (x86)\Microsoft\Edge",
+              "C:\Program Files\Azure",
+              "C:\Program Files\R",
+              "C:\Program Files\Rtools"
+          )
 
-          # 4. CMD: Diller ve Araçlar (Android, Git, Docker, Java, Node, Dotnet, R, Azure)
-          $bat4 = "@echo off`nrd /s /q `"C:\Program Files\Android`" > nul 2>&1`nrd /s /q `"C:\Program Files\Git`" > nul 2>&1`nrd /s /q `"C:\Program Files\Docker`" > nul 2>&1`nrd /s /q `"C:\Program Files\Java`" > nul 2>&1`nrd /s /q `"C:\Program Files\nodejs`" > nul 2>&1`nrd /s /q `"C:\Program Files\dotnet`" > nul 2>&1`nrd /s /q `"C:\Program Files\R`" > nul 2>&1`nrd /s /q `"C:\Program Files\Rtools`" > nul 2>&1`nrd /s /q `"C:\Program Files\Azure`" > nul 2>&1`nexit /b 0"
-          Set-Content -Path "C:\del4.bat" -Value $bat4
+          foreach ($app in $appPaths) {
+              if (Test-Path $app) {
+                  $batCount++
+                  $batFile = "C:\del_app_$batCount.bat"
+                  $batContent = "@echo off`nrd /s /q `"$app`" > nul 2>&1`nexit /b 0"
+                  Set-Content -Path $batFile -Value $batContent
+                  $processes += Start-Process cmd.exe -ArgumentList "/c $batFile" -NoNewWindow -PassThru
+              }
+          }
 
-          # 5. CMD: Ekstra 4 GB (SDKs, Windows Kits, WinSxS\Backup) - Robocopy ile inatçıları atlar
-          $bat5 = "@echo off`nrobocopy C:\empty_dir `"C:\Program Files\Microsoft SDKs`" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1`nrd /s /q `"C:\Program Files\Microsoft SDKs`" > nul 2>&1`nrobocopy C:\empty_dir `"C:\Program Files (x86)\Windows Kits`" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1`nrd /s /q `"C:\Program Files (x86)\Windows Kits`" > nul 2>&1`nrobocopy C:\empty_dir `"C:\Windows\WinSxS\Backup`" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1`nrd /s /q `"C:\Windows\WinSxS\Backup`" > nul 2>&1`nexit /b 0"
-          Set-Content -Path "C:\del5.bat" -Value $bat5
-
-          # 6. CMD: Tarayıcılar ve Update Çöpleri
-          $bat6 = "@echo off`nrd /s /q `"C:\ProgramData\Package Cache`" > nul 2>&1`nrd /s /q `"C:\Windows\SoftwareDistribution`" > nul 2>&1`nrd /s /q `"C:\Program Files\Google`" > nul 2>&1`nrd /s /q `"C:\Program Files (x86)\Microsoft\Edge`" > nul 2>&1`nexit /b 0"
-          Set-Content -Path "C:\del6.bat" -Value $bat6
-
-          # 7. CMD: Windows Temp ve Downloader
-          $bat7 = "@echo off`nrd /s /q `"C:\Windows\Temp`" > nul 2>&1`nrd /s /q `"C:\Windows\Prefetch`" > nul 2>&1`nrd /s /q `"C:\ProgramData\Microsoft\Network\Downloader`" > nul 2>&1`nexit /b 0"
-          Set-Content -Path "C:\del7.bat" -Value $bat7
-
-          # 8. CMD: Kullanıcı Önbellekleri
-          $bat8 = "@echo off`nrd /s /q `"C:\Users\runneradmin\.nuget`" > nul 2>&1`nrd /s /q `"C:\Users\runneradmin\.m2`" > nul 2>&1`nrd /s /q `"C:\Users\runneradmin\.gradle`" > nul 2>&1`nrd /s /q `"C:\Users\runneradmin\.android`" > nul 2>&1`nrd /s /q `"C:\Users\runneradmin\AppData\Local\Temp`" > nul 2>&1`nexit /b 0"
-          Set-Content -Path "C:\del8.bat" -Value $bat8
+          # 3. Kalan Çöpler İçin Tek Bir CMD Aç
+          $batCount++
+          $remainingBat = "C:\del_remaining_$batCount.bat"
+          $remainingContent = @"
+          @echo off
+          rd /s /q "C:\ProgramData\Package Cache" > nul 2>&1
+          rd /s /q "C:\ProgramData\Microsoft\VisualStudio" > nul 2>&1
+          rd /s /q "C:\ProgramData\Docker" > nul 2>&1
+          rd /s /q "C:\ProgramData\chocolatey" > nul 2>&1
+          rd /s /q "C:\Windows\SoftwareDistribution" > nul 2>&1
+          rd /s /q "C:\Windows\Temp" > nul 2>&1
+          rd /s /q "C:\Windows\Prefetch" > nul 2>&1
+          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\.nuget" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\.m2" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\.gradle" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\.android" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp" > nul 2>&1
           
-          # 8 CMD PENCERESİNİ AYNI ANDA BAŞLAT
-          Write-Host "8 CMD penceresi paralel olarak calisiyor. Islemler bitene kadar beklenecek..."
-          $p1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
-          $p2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
-          $p3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
-          $p4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
-          $p5 = Start-Process cmd.exe -ArgumentList "/c C:\del5.bat" -NoNewWindow -PassThru
-          $p6 = Start-Process cmd.exe -ArgumentList "/c C:\del6.bat" -NoNewWindow -PassThru
-          $p7 = Start-Process cmd.exe -ArgumentList "/c C:\del7.bat" -NoNewWindow -PassThru
-          $p8 = Start-Process cmd.exe -ArgumentList "/c C:\del8.bat" -NoNewWindow -PassThru
+          robocopy C:\empty_dir "C:\Windows\WinSxS\Backup" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Windows\WinSxS\Backup" > nul 2>&1
+          exit /b 0
+          "@
+          Set-Content -Path $remainingBat -Value $remainingContent
+          $processes += Start-Process cmd.exe -ArgumentList "/c $remainingBat" -NoNewWindow -PassThru
           
-          # ZAMAN SINIRI YOK. BITENE KADAR BEKLE.
-          $p1.WaitForExit()
-          $p2.WaitForExit()
-          $p3.WaitForExit()
-          $p4.WaitForExit()
-          $p5.WaitForExit()
-          $p6.WaitForExit()
-          $p7.WaitForExit()
-          $p8.WaitForExit()
+          Write-Host "Toplam $($processes.Count) adet CMD penceresi acildi. Hepsini bitmesi bekleniyor..."
+          
+          # TÜM CMD PENCERELERİNİN BİTMESİNİ BEKLE
+          foreach ($p in $processes) {
+              $p.WaitForExit()
+          }
           
           # Temizlik
-          Remove-Item -Path "C:\del1.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del2.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del3.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del4.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del5.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del6.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del7.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del8.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del_*.bat" -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
           exit 0
@@ -190,7 +215,7 @@ jobs:
       - name: Bağlantı Bilgilerini Göster
         run: |
           Write-Host "===================================="
-          Write-Host "     ERROR-4004 HILE MODU           "
+          Write-Host "     ERROR-4004 HILE MODU PRO        "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
