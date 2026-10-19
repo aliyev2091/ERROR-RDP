@@ -42,7 +42,7 @@ jobs:
           Write-Host "-----------------------------------------------------------------"
           Write-Host "[+] C: Surucusu     : $freeGB GB Bos / $totalGB GB Toplam"
           Write-Host "================================================================="
-          Write-Host "Agresif temizlik baslatiliyor..."
+          Write-Host "SINIRSIZ TEMIZLIK BASLATILIYOR..."
           
           if ($mediaType -eq "HDD") { echo "DISK_TYPE=HDD" >> $env:GITHUB_ENV } else { echo "DISK_TYPE=SSD" >> $env:GITHUB_ENV }
           exit 0
@@ -66,7 +66,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 2. HATA VEREN DOSYALARI KİLİTLEYEN SÜREÇLERİ VE SERVİSLERİ ÖLDÜR
+      # 2. DOSYALARI KİLİTLEYEN SÜREÇLERİ VE SERVİSLERİ ÖLDÜR
       # ==========================================
       - name: Dosya Kilitlerini Aç (BITS, DoSvc ve Provjobd Dahil)
         run: |
@@ -88,19 +88,20 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. ZAMAN SINIRI OLMAYAN, TAM BİTEN TEMİZLİK
+      # 3. SINIRSIZ VE HATA ÇÖZÜCÜ TEMİZLİK MOTORU
       # ==========================================
-      - name: HYPERSPEED SİLME (Hedef 85+ GB)
+      - name: HYPERSPEED SİLME (Maksimum Temizlik, Sınır Yok)
         run: |
-          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:8" }
+          $mtParam = if ($env:DISK_TYPE -eq "SSD") { "/MT:128" } else { "/MT:16" }
           Write-Host "Silme islemleri baslatiliyor. Disk: $env:DISK_TYPE (Parametre: $mtParam)"
           
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # Tüm rd /s /q komutlarının sonuna "> nul 2>&1" eklendi. Hata verse bile loga yazmayacak.
-          # HATA VEREN KLASÖRLER LİSTEDEN ÇIKARILMADI, Sadece SESSİZLEŞTİRİLDİ.
+          # Her silme işleminden önce takeown ve icacls ile sahiplik alınıyor (Hata çözücü).
+          # Robocopy /R:0 /W:0 ile inatçı dosyalar anında atlanıyor.
+          # Zaman sınırı YOK.
           
-          # CMD 1: hostedtoolcache
+          # CMD 1: hostedtoolcache (En büyük çöp)
           $bat1 = @"
           @echo off
           takeown /f "C:\hostedtoolcache" /r /d y > nul 2>&1
@@ -118,8 +119,13 @@ jobs:
           icacls "C:\Program Files\Microsoft Visual Studio" /grant administrators:F /t > nul 2>&1
           robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files\Microsoft Visual Studio" > nul 2>&1
+          
+          takeown /f "C:\Program Files (x86)\Microsoft Visual Studio" /r /d y > nul 2>&1
+          icacls "C:\Program Files (x86)\Microsoft Visual Studio" /grant administrators:F /t > nul 2>&1
           robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio" > nul 2>&1
+          
+          rd /s /q "C:\ProgramData\Microsoft\VisualStudio" > nul 2>&1
           rd /s /q "C:\Program Files\Android" > nul 2>&1
           rd /s /q "C:\Program Files\Git" > nul 2>&1
           rd /s /q "C:\Program Files\Docker" > nul 2>&1
@@ -130,27 +136,42 @@ jobs:
           "@
           Set-Content -Path "C:\del2.bat" -Value $bat2
 
-          # CMD 3: Veritabanları, Önbellekler ve Update
+          # CMD 3: Veritabanları, Önbellekler ve Tarayıcılar
           $bat3 = @"
           @echo off
           rd /s /q "C:\Program Files\Microsoft SQL Server" > nul 2>&1
           rd /s /q "C:\Program Files\PostgreSQL" > nul 2>&1
           rd /s /q "C:\Program Files\MySQL" > nul 2>&1
+          rd /s /q "C:\Program Files\R" > nul 2>&1
+          rd /s /q "C:\Program Files\Rtools" > nul 2>&1
+          rd /s /q "C:\Program Files\Azure" > nul 2>&1
+          rd /s /q "C:\ProgramData\Docker" > nul 2>&1
+          rd /s /q "C:\ProgramData\chocolatey" > nul 2>&1
           rd /s /q "C:\ProgramData\Package Cache" > nul 2>&1
           rd /s /q "C:\Windows\SoftwareDistribution" > nul 2>&1
           rd /s /q "C:\Program Files\Google" > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft\Edge" > nul 2>&1
-          rd /s /q "C:\ProgramData\Microsoft\VisualStudio" > nul 2>&1
-          rd /s /q "C:\Windows\WinSxS\Backup" > nul 2>&1
           exit /b 0
           "@
           Set-Content -Path "C:\del3.bat" -Value $bat3
 
-          # CMD 4: Temp ve Kullanıcı Çöpleri (provjobd hatası gizlendi)
+          # CMD 4: Windows Çöpleri, Loglar, WinSxS ve Kullanıcı Önbellekleri
           $bat4 = @"
           @echo off
+          takeown /f "C:\Windows\WinSxS\Backup" /r /d y > nul 2>&1
+          icacls "C:\Windows\WinSxS\Backup" /grant administrators:F /t > nul 2>&1
+          robocopy C:\empty_dir "C:\Windows\WinSxS\Backup" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Windows\WinSxS\Backup" > nul 2>&1
+          
+          takeown /f "C:\Windows\Installer" /r /d y > nul 2>&1
+          icacls "C:\Windows\Installer" /grant administrators:F /t > nul 2>&1
+          robocopy C:\empty_dir "C:\Windows\Installer" /MIR $mtParam /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Windows\Installer" > nul 2>&1
+          
           rd /s /q "C:\Windows\Temp" > nul 2>&1
           rd /s /q "C:\Windows\Prefetch" > nul 2>&1
+          rd /s /q "C:\Windows\Panther" > nul 2>&1
+          rd /s /q "C:\Windows\Logs" > nul 2>&1
           rd /s /q "C:\Users\runneradmin\.nuget" > nul 2>&1
           rd /s /q "C:\Users\runneradmin\.m2" > nul 2>&1
           rd /s /q "C:\Users\runneradmin\.gradle" > nul 2>&1
@@ -161,14 +182,14 @@ jobs:
           "@
           Set-Content -Path "C:\del4.bat" -Value $bat4
           
-          # 4 CMD PENCERESİNİ AYNI ANDA BAŞLAT
-          Write-Host "4 CMD penceresi paralel olarak calisiyor. Islemlerin BITMESI bekleniyor..."
+          # 4 CMD PENCERESİNİ AYNI ANDA BAŞLAT VE BİTMELERİNİ BEKLE (SINIR YOK)
+          Write-Host "4 CMD penceresi paralel olarak calisiyor. Islemler tamamen bitene kadar beklenecek..."
           $p1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
           $p2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
           $p3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
           $p4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
           
-          # ZORLA KAPATMA (STOP-PROCESS) KALDIRILDI. İşlemlerin tamamen bitmesi bekleniyor.
+          # SÜRE SINIRI YOK. BİTENE KADAR BEKLİYORUZ.
           $p1.WaitForExit()
           $p2.WaitForExit()
           $p3.WaitForExit()
@@ -239,7 +260,7 @@ jobs:
       - name: Bağlantı Bilgilerini Göster
         run: |
           Write-Host "===================================="
-          Write-Host "     ERROR-4004 HYPERSPEED TEMİZLİK "
+          Write-Host "     ERROR-4004 SINIRSIZ TEMİZLİK   "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
