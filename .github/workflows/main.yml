@@ -27,13 +27,31 @@ jobs:
           exit 0
 
       # ==========================================
-      # 2. VARSAYILAN PROFİL MASAÜSTÜNÜ TEMİZLE (EDGE'İ YOK ET)
+      # 2. EDGE TARAYICISINI VE KISAYOLLARINI KÖKÜNDEN SİL
       # ==========================================
-      - name: Varsayilan Profil Masaustunu Temizle
+      - name: Edge Tarayicisini ve Kisayollarini Komple Sil
         run: |
-          Write-Host "Yeni kullanicilara kopyalanacak varsayilan masaustu temizleniyor..."
-          Remove-Item -Path "C:\Users\Default\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Write-Host "Microsoft Edge ve tum kalintilari siliniyor..."
           
+          # Edge uygulamasını sil (Bir daha açılamasın diye)
+          Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Program Files\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # Edge kısayollarını her yerden sil
+          Remove-Item -Path "C:\Users\Default\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # Başlat menüsündeki kısayolları temizle
+          Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # Görev çubuğundaki varsayılan pinleri (Edge, Explorer vs.) temizle
+          Remove-Item -Path "C:\Users\Default\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\ERROR-4004\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          exit 0
+
       - name: Tailscale'i Başlat
         uses: tailscale/github-action@v3
         with:
@@ -53,7 +71,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. TEMEL PERFORMANS VE SERVİS KAPATMA (HATA DÜZELTİLDİ)
+      # 3. TEMEL PERFORMANS VE SERVİS KAPATMA
       # ==========================================
       - name: Servisleri Kapat ve Ultimate Guc Planini Aktif Et
         run: |
@@ -63,9 +81,6 @@ jobs:
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue 
           }
-          
-          Write-Host "Ultimate Performance Guc Plani aktif ediliyor..."
-          # Hata vermemesi icin cmd /c ile calistiriyoruz
           cmd.exe /c "powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           cmd.exe /c "powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           exit 0
@@ -98,7 +113,6 @@ jobs:
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "MinAnimate" -Value "0"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0"
-          
           New-Item -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell" -Force -ErrorAction SilentlyContinue | Out-Null
           Set-ItemProperty -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell" -Name "FolderType" -Value "NotSpecified" -ErrorAction SilentlyContinue
           
@@ -106,25 +120,15 @@ jobs:
           try {
               if (-not (Test-Path $ptPath)) { New-Item -Path $ptPath -Force -ErrorAction Stop | Out-Null }
               Set-ItemProperty -Path $ptPath -Name "PowerThrottlingOff" -Value 1 -Type DWord -Force -ErrorAction Stop
-          } catch { Write-Host "PowerThrottling ayarlanamadi, devam ediliyor..." }
+          } catch {}
           exit 0
 
       # ==========================================
-      # 6. MASAÜSTÜ VE GÖREV ÇUBUĞU TEMİZLİĞİ
+      # 6. MASAÜSTÜNE SADECE CHROME KISAYOLU EKLE
       # ==========================================
-      - name: Masaustunu ve Gorev Cubugunu Temizle
+      - name: Masaustune Sadece Chrome Ekle
         run: |
-          Write-Host "Masaustu temizleniyor..."
-          Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
-          Write-Host "Gorev cubugundaki varsayilan simgeler (Edge vb.) temizleniyor..."
-          # Görev çubuğuna sabitlenmiş varsayılan ikonları sil
-          Remove-Item -Path "C:\Users\ERROR-4004\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\runneradmin\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" -Recurse -Force -ErrorAction SilentlyContinue
-
-          Write-Host "Chrome'un gercek yolu bulunuyor ve masaustu kisayolu olusturuluyor..."
+          Write-Host "Chrome kisayolu olusturuluyor..."
           $chromePath = ""
           try {
               $appPath = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction Stop
@@ -136,19 +140,21 @@ jobs:
 
           if ($chromePath -ne "") {
               $WshShell = New-Object -ComObject WScript.Shell
-              # Public masaustune at (Butun kullanicilar gorur)
-              $Shortcut = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Google Chrome.lnk")
+              
+              # ERROR-4004 kullanicisinin masaustune at
+              New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
+              $Shortcut = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Google Chrome.lnk")
               $Shortcut.TargetPath = $chromePath
               $Shortcut.Save()
-              # ERROR-4004 kullanicisinin masaustune de at
-              New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
-              $Shortcut2 = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Google Chrome.lnk")
+              
+              # Genel masaustune de at
+              New-Item -ItemType Directory -Force -Path "C:\Users\Public\Desktop" | Out-Null
+              $Shortcut2 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Google Chrome.lnk")
               $Shortcut2.TargetPath = $chromePath
               $Shortcut2.Save()
-              Write-Host "Chrome kisayolu basariyla olusturuldu: $chromePath"
           }
           
-          # Masaüstü ikonlarının GÖRÜNÜR olmasını sağla
+          # Ikonlarin gorunur olmasini sagla
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           exit 0
 
@@ -162,13 +168,11 @@ jobs:
           if (-not (Test-Path $telPath)) { New-Item -Path $telPath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $telPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          Write-Host "Uygulama izinleri kapatiliyor..."
           $capPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore"
           if (Test-Path "$capPath\location") { Set-ItemProperty -Path "$capPath\location" -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue }
           if (Test-Path "$capPath\microphone") { Set-ItemProperty -Path "$capPath\microphone" -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue }
           if (Test-Path "$capPath\webcam") { Set-ItemProperty -Path "$capPath\webcam" -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue }
           
-          Write-Host "Karanlik mod aktif ediliyor..."
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           exit 0
