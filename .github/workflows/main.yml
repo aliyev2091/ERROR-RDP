@@ -10,7 +10,7 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. DETAYLI SİSTEM BİLGİLERİ VE DİSK TÜRÜ TESPİTİ
+      # 1. DETAYLI SİSTEM BİLGİLERİ
       # ==========================================
       - name: DETAYLI SISTEM DONANIM BILGILERI
         run: |
@@ -19,14 +19,10 @@ jobs:
           Write-Host "================================================================="
           $cpu = Get-CimInstance -ClassName Win32_Processor
           Write-Host "[+] Islemci (CPU)   : $($cpu.Name)"
-          $os = Get-CimInstance -ClassName Win32_OperatingSystem
-          Write-Host "[+] Isletim Sistemi : $($os.Caption) (Build: $($os.BuildNumber))"
-          $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
-          Write-Host "[+] RAM Miktari     : $ram GB"
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
           Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
           Write-Host "================================================================="
-          Write-Host "Hizli ve sinirsiz temizlik baslatiliyor..."
+          Write-Host "Cekirdek motor ile hizli temizlik baslatiliyor..."
           exit 0
 
       - name: Tailscale'i Başlat
@@ -56,7 +52,6 @@ jobs:
           cmd.exe /c "taskkill /F /IM provjobd.exe /T" > $null 2>&1
           cmd.exe /c "net stop bits /y" > $null 2>&1
           cmd.exe /c "net stop dosvc /y" > $null 2>&1
-          cmd.exe /c "taskkill /F /IM msiexec.exe /T" > $null 2>&1
           
           $killerServices = @("Docker*", "SQL*", "MSSQL*", "com.docker*", "WSearch", "SysMain", "WinDefend", "wuauserv", "EventLog", "TrustedInstaller", "DoSvc")
           foreach ($svc in $killerServices) {
@@ -66,39 +61,35 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. 6 PARALEL CMD MOTORU (Süre Sınırı Yok)
+      # 3. .NET ÇEKİRDEK MOTORU (Hedef Maksimum Hız)
       # ==========================================
       - name: HYPERSPEED SİLME (Saf Hız)
         run: |
-          Write-Host "Silme islemleri 6 farkli CMD penceresinde baslatiliyor..."
+          Write-Host "Silme islemleri baslatiliyor. En agir dosyalar .NET motoru ile siliniyor..."
           
+          # 1. EN AĞIR DOSYALAR İÇİN .NET MOTORU (Saniyeler içinde siler)
+          $heavyFolders = @(
+            "C:\hostedtoolcache",
+            "C:\Program Files\Microsoft Visual Studio",
+            "C:\Program Files (x86)\Microsoft Visual Studio"
+          )
+          
+          foreach ($folder in $heavyFolders) {
+            if (Test-Path $folder) {
+              Write-Host "Cekirdek motor ile siliniyor: $folder"
+              try {
+                [System.IO.Directory]::Delete($folder, $true)
+              } catch {
+                # Hata verirse CMD ile arkasindan silmeyi dene
+                cmd.exe /c "rd /s /q `"$folder`"" > $null 2>&1
+              }
+            }
+          }
+
+          # 2. DİĞER ÇÖPLER İÇİN PARALEL CMD MOTORU
           New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # Yavaşlatan sistem dosyaları (WinSxS, Installer, Panther) LİSTEDEN ÇIKARILDI.
-          # Sadece hızlı silinen devasa çöpler var. Hata verse bile işlemi durdurmuyoruz.
-
-          # CMD 1: hostedtoolcache (En büyük çöp)
-          $bat1 = @"
-          @echo off
-          robocopy C:\empty_dir "C:\hostedtoolcache" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\hostedtoolcache" > nul 2>&1
-          exit /b 0
-          "@
-          Set-Content -Path "C:\del1.bat" -Value $bat1
-
-          # CMD 2: Visual Studio
-          $bat2 = @"
-          @echo off
-          robocopy C:\empty_dir "C:\Program Files\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files\Microsoft Visual Studio" > nul 2>&1
-          robocopy C:\empty_dir "C:\Program Files (x86)\Microsoft Visual Studio" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
-          rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio" > nul 2>&1
-          exit /b 0
-          "@
-          Set-Content -Path "C:\del2.bat" -Value $bat2
-
-          # CMD 3: Diller ve Veritabanları
-          $bat3 = @"
+          $batContent = @"
           @echo off
           rd /s /q "C:\Program Files\Microsoft SQL Server" > nul 2>&1
           rd /s /q "C:\Program Files\Android" > nul 2>&1
@@ -107,69 +98,32 @@ jobs:
           rd /s /q "C:\Program Files\Java" > nul 2>&1
           rd /s /q "C:\Program Files\nodejs" > nul 2>&1
           rd /s /q "C:\Program Files\dotnet" > nul 2>&1
-          exit /b 0
-          "@
-          Set-Content -Path "C:\del3.bat" -Value $bat3
-
-          # CMD 4: Tarayıcılar ve Önbellekler
-          $bat4 = @"
-          @echo off
           rd /s /q "C:\Program Files\PostgreSQL" > nul 2>&1
           rd /s /q "C:\Program Files\MySQL" > nul 2>&1
           rd /s /q "C:\ProgramData\Package Cache" > nul 2>&1
           rd /s /q "C:\Windows\SoftwareDistribution" > nul 2>&1
           rd /s /q "C:\Program Files\Google" > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft\Edge" > nul 2>&1
-          exit /b 0
-          "@
-          Set-Content -Path "C:\del4.bat" -Value $bat4
-
-          # CMD 5: Windows Temp ve Kullanıcı Çöpleri
-          $bat5 = @"
-          @echo off
           rd /s /q "C:\Windows\Temp" > nul 2>&1
           rd /s /q "C:\Windows\Prefetch" > nul 2>&1
-          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader" > nul 2>&1
-          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp" > nul 2>&1
-          exit /b 0
-          "@
-          Set-Content -Path "C:\del5.bat" -Value $bat5
-
-          # CMD 6: Kullanıcı Önbellekleri
-          $bat6 = @"
-          @echo off
           rd /s /q "C:\Users\runneradmin\.nuget" > nul 2>&1
           rd /s /q "C:\Users\runneradmin\.m2" > nul 2>&1
           rd /s /q "C:\Users\runneradmin\.gradle" > nul 2>&1
           rd /s /q "C:\Users\runneradmin\.android" > nul 2>&1
+          rd /s /q "C:\Users\runneradmin\AppData\Local\Temp" > nul 2>&1
+          rd /s /q "C:\ProgramData\Microsoft\Network\Downloader" > nul 2>&1
           exit /b 0
           "@
-          Set-Content -Path "C:\del6.bat" -Value $bat6
+          Set-Content -Path "C:\fast_delete.bat" -Value $batContent
           
-          # 6 CMD PENCERESİNİ AYNI ANDA BAŞLAT (SÜRE SINIRI YOK)
-          Write-Host "6 CMD penceresi paralel olarak calisiyor. Islemler tamamen bitene kadar beklenecek..."
-          $p1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
-          $p2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
-          $p3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
-          $p4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
-          $p5 = Start-Process cmd.exe -ArgumentList "/c C:\del5.bat" -NoNewWindow -PassThru
-          $p6 = Start-Process cmd.exe -ArgumentList "/c C:\del6.bat" -NoNewWindow -PassThru
+          Write-Host "Diger copler CMD ile paralel siliniyor..."
+          $p = Start-Process cmd.exe -ArgumentList "/c C:\fast_delete.bat" -NoNewWindow -PassThru
           
-          # ZAMAN SINIRI YOK. BİTENE KADAR BEKLİYORUZ.
-          $p1.WaitForExit()
-          $p2.WaitForExit()
-          $p3.WaitForExit()
-          $p4.WaitForExit()
-          $p5.WaitForExit()
-          $p6.WaitForExit()
+          # ZAMAN SINIRI YOK. BITENE KADAR BEKLE.
+          $p.WaitForExit()
           
           # Temizlik
-          Remove-Item -Path "C:\del1.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del2.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del3.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del4.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del5.bat" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\del6.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\fast_delete.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
@@ -230,7 +184,7 @@ jobs:
       - name: Bağlantı Bilgilerini Göster
         run: |
           Write-Host "===================================="
-          Write-Host "     ERROR-4004 SINIRSIZ TEMİZLİK   "
+          Write-Host "     ERROR-4004 HIZLI TEMİZLİK      "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
