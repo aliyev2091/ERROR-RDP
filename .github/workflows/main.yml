@@ -61,16 +61,15 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. 4 PARALEL CMD MOTORU (Zaman Sınırı Yok)
+      # 3. 5 PARALEL CMD MOTORU (+4 GB Eklendi)
       # ==========================================
       - name: HYPERSPEED SİLME (Paralel CMD)
         run: |
-          Write-Host "Silme islemleri 4 farkli CMD penceresinde baslatiliyor..."
+          Write-Host "Silme islemleri 5 farkli CMD penceresinde baslatiliyor..."
           
-          # En yavaş ve kilitlenen sistem dosyaları (WinSxS, Panther vb.) listeden ÇIKARILDI.
-          # Sadece devasa ve hızlı silinen çöpler var. Sondaki > nul 2>&1 hataları gizler.
+          New-Item -ItemType Directory -Force -Path "C:\empty_dir" | Out-Null
           
-          # CMD 1: hostedtoolcache
+          # CMD 1: hostedtoolcache (En büyük çöp)
           $bat1 = @"
           @echo off
           rd /s /q "C:\hostedtoolcache" > nul 2>&1
@@ -78,12 +77,14 @@ jobs:
           "@
           Set-Content -Path "C:\del1.bat" -Value $bat1
 
-          # CMD 2: Visual Studio
+          # CMD 2: Visual Studio, SDKs ve Windows Kits (+2.5 GB)
           $bat2 = @"
           @echo off
           rd /s /q "C:\Program Files\Microsoft Visual Studio" > nul 2>&1
           rd /s /q "C:\Program Files (x86)\Microsoft Visual Studio" > nul 2>&1
-          rd /s /q "C:\ProgramData\Microsoft\VisualStudio" > nul 2>&1
+          rd /s /q "C:\ProgramData\Microsoft\VisualStudio\Packages" > nul 2>&1
+          rd /s /q "C:\Program Files\Microsoft SDKs" > nul 2>&1
+          rd /s /q "C:\Program Files (x86)\Windows Kits" > nul 2>&1
           exit /b 0
           "@
           Set-Content -Path "C:\del2.bat" -Value $bat2
@@ -100,6 +101,7 @@ jobs:
           rd /s /q "C:\Program Files\dotnet" > nul 2>&1
           rd /s /q "C:\Program Files\PostgreSQL" > nul 2>&1
           rd /s /q "C:\Program Files\MySQL" > nul 2>&1
+          rd /s /q "C:\Program Files\Azure" > nul 2>&1
           exit /b 0
           "@
           Set-Content -Path "C:\del3.bat" -Value $bat3
@@ -122,25 +124,40 @@ jobs:
           exit /b 0
           "@
           Set-Content -Path "C:\del4.bat" -Value $bat4
+
+          # CMD 5: Windows Derinlikleri (WinSxS ve Help) - Robocopy ile hızlı ve hatasız
+          $bat5 = @"
+          @echo off
+          robocopy C:\empty_dir "C:\Windows\WinSxS\Backup" /MIR /MT:128 /R:0 /W:0 /NFL /NDL /NJH /NJS > nul 2>&1
+          rd /s /q "C:\Windows\WinSxS\Backup" > nul 2>&1
+          rd /s /q "C:\Windows\Help" > nul 2>&1
+          rd /s /q "C:\Windows\LiveKernelReports" > nul 2>&1
+          exit /b 0
+          "@
+          Set-Content -Path "C:\del5.bat" -Value $bat5
           
-          # 4 CMD PENCERESİNİ AYNI ANDA BAŞLAT
-          Write-Host "4 CMD penceresi paralel olarak calisiyor. Islemler bitene kadar beklenecek..."
+          # 5 CMD PENCERESİNİ AYNI ANDA BAŞLAT
+          Write-Host "5 CMD penceresi paralel olarak calisiyor. Islemler bitene kadar beklenecek..."
           $p1 = Start-Process cmd.exe -ArgumentList "/c C:\del1.bat" -NoNewWindow -PassThru
           $p2 = Start-Process cmd.exe -ArgumentList "/c C:\del2.bat" -NoNewWindow -PassThru
           $p3 = Start-Process cmd.exe -ArgumentList "/c C:\del3.bat" -NoNewWindow -PassThru
           $p4 = Start-Process cmd.exe -ArgumentList "/c C:\del4.bat" -NoNewWindow -PassThru
+          $p5 = Start-Process cmd.exe -ArgumentList "/c C:\del5.bat" -NoNewWindow -PassThru
           
           # ZAMAN SINIRI YOK. BITENE KADAR BEKLE.
           $p1.WaitForExit()
           $p2.WaitForExit()
           $p3.WaitForExit()
           $p4.WaitForExit()
+          $p5.WaitForExit()
           
           # Temizlik
           Remove-Item -Path "C:\del1.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\del2.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\del3.bat" -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\del4.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\del5.bat" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\empty_dir" -Recurse -Force -ErrorAction SilentlyContinue
           
           Write-Host "Silme islemi tamamlandi!"
           exit 0
