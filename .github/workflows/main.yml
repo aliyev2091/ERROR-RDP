@@ -46,6 +46,9 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
+      # ==========================================
+      # 3. KULLANICIYI OLUŞTUR (KARANLIK MOD İÇİN ÖNCE OLUŞTURMALIYIZ)
+      # ==========================================
       - name: Kullanıcı Oluştur, Full Admin Yap ve RDP'yi Etkinleştir
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
@@ -60,7 +63,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. TEMEL PERFORMANS VE ZORLA ULTIMATE PLAN (KÖKTEN)
+      # 4. TEMEL PERFORMANS VE ZORLA ULTIMATE PLAN
       # ==========================================
       - name: Servisleri Kapat ve Ultimate Guc Planini Zorla
         run: |
@@ -83,7 +86,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 4. GELİŞMİŞ RDP VE AĞ GECİKMESİNİ DÜŞÜRME
+      # 5. GELİŞMİŞ RDP VE AĞ GECİKMESİNİ DÜŞÜRME
       # ==========================================
       - name: Gelismis RDP ve Ag Optimizasyonu
         run: |
@@ -99,27 +102,28 @@ jobs:
           exit 0
 
       # ==========================================
-      # 5. ZORLA KARANLIK MOD (AYARLAR EKRANI DAHİL)
+      # 6. KARANLIK MODU KULLANICI PROFILINE ZORLA YAZ
       # ==========================================
       - name: Sistem ve Arayuz Hizlandirma (Zorla Karanlik Mod)
         run: |
-          Write-Host "Karanlik mod varsayilan profile ve sisteme muhurluyor..."
-          # Mevcut kullanici icin
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          Write-Host "Karanlik mod kullanici profiline muhurluyor..."
           
-          # Varsayilan Profil (Yeni acilacak ERROR-4004 icin)
-          $defaultHive = "C:\Users\Default\NTUSER.DAT"
-          if (Test-Path $defaultHive) {
-              cmd.exe /c "reg load HKU\DefUser `"$defaultHive`"" > $null 2>&1
-              cmd.exe /c "reg add `"HKU\DefUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`" /v AppsUseLightTheme /t REG_DWORD /d 0 /f" > $null 2>&1
-              cmd.exe /c "reg add `"HKU\DefUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`" /v SystemUsesLightTheme /t REG_DWORD /d 0 /f" > $null 2>&1
-              cmd.exe /c "reg unload HKU\DefUser" > $null 2>&1
+          # ERROR-4004 kullanicisinin kayit defteri dosyasini yukle ve degistir
+          $userProfile = "C:\Users\ERROR-4004"
+          $ntUserDat = "$userProfile\NTUSER.DAT"
+          
+          if (Test-Path $ntUserDat) {
+              # Profili yükle
+              cmd.exe /c "reg load HKU\TempUser `"$ntUserDat`"" > $null 2>&1
+              
+              # Karanlik mod ayarlarini dogrudan yaz
+              cmd.exe /c "reg add `"HKU\TempUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`" /v AppsUseLightTheme /t REG_DWORD /d 0 /f" > $null 2>&1
+              cmd.exe /c "reg add `"HKU\TempUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`" /v SystemUsesLightTheme /t REG_DWORD /d 0 /f" > $null 2>&1
+              
+              # Profili kaldir
+              cmd.exe /c "reg unload HKU\TempUser" > $null 2>&1
+              Write-Host "Karanlik mod ERROR-4004 profilinde zorla aktif edildi."
           }
-          
-          # Sistem genelinde karanlik mod zorlamasi (Politika)
-          $themePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-          if (-not (Test-Path $themePath)) { New-Item -Path $themePath -Force -ErrorAction SilentlyContinue | Out-Null }
           
           # Diger hizlandirmalar
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
@@ -129,7 +133,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 6. MASAÜSTÜNE SADECE CHROME EKLE
+      # 7. MASAÜSTÜNE SADECE CHROME EKLE
       # ==========================================
       - name: Masaustune Sadece Chrome Ekle
         run: |
@@ -157,7 +161,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. GÜVENLİK, KAMERA/MİKROFON KÖKTEN KAPATMA VE PAGEFILE
+      # 8. GÜVENLİK, KAMERA/MİKROFON KÖKTEN KAPATMA VE PAGEFILE SİLME
       # ==========================================
       - name: Guvenlik, Gizlilik ve Pagefile Ayarlari
         run: |
@@ -169,28 +173,21 @@ jobs:
           # KAMERA VE MIKROFONU POLITIKALARLA TAMAMEN KAPAT (HKLM)
           $privacyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy"
           if (-not (Test-Path $privacyPath)) { New-Item -Path $privacyPath -Force -ErrorAction SilentlyContinue | Out-Null }
-          # 2 = Force Deny (Zorla Reddet)
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessCamera" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessMicrophone" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          # Eski usul kayit defteri (Yedek)
-          $stores = @(
-              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
-              "HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
-              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone",
-              "HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone",
-              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam",
-              "HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam"
-          )
-          foreach ($store in $stores) {
-              if (-not (Test-Path $store)) { New-Item -Path $store -Force -ErrorAction SilentlyContinue | Out-Null }
-              Set-ItemProperty -Path $store -Name "Value" -Value "Deny" -Force -ErrorAction SilentlyContinue
-          }
-          
-          Write-Host "Sanal bellek (Pagefile) kokten siliniyor..."
+          # Pagefile'i CIM ile Kökten Sil (Windows inatla açıyorsa bunu kullan)
+          Write-Host "Sanal bellek (Pagefile) kökten siliniyor..."
           $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
           if ($cs) {
               Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile = $false} -ErrorAction SilentlyContinue
+          }
+          # Var olan pagefile ayarlarini sil
+          $pageFiles = Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue
+          if ($pageFiles) {
+              foreach ($pf in $pageFiles) {
+                  Remove-CimInstance -InputObject $pf -ErrorAction SilentlyContinue
+              }
           }
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
           
@@ -208,7 +205,7 @@ jobs:
           Write-Host "Kullanici Adi : ERROR-4004"
           Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
           Write-Host "===================================="
-          Write-Host "Sistem hazir! Masaustunde sadece Chrome ve Cop Kutusu var."
+          Write-Host "Sistem hazir! Lutfen RDP ile baglanin."
           exit 0
           
       - name: Sistemi 60 Saat Boyunca Açık Tut
