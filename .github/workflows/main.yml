@@ -12,7 +12,7 @@ jobs:
       # ==========================================
       # 1. DETAYLI SİSTEM BİLGİLERİ
       # ==========================================
-      - name: DETAYLI SISTEM DONANIM BILGILERI
+      - name: Sistem Özeti
         run: |
           Write-Host "================================================================="
           Write-Host "                 DETAYLI SISTEM BILGILERI                        "
@@ -27,9 +27,9 @@ jobs:
           exit 0
 
       # ==========================================
-      # 2. EDGE TARAYICISINI VE KISAYOLLARINI KÖKÜNDEN SİL
+      # 2. EDGE TARAYICISINI KÖKÜNDEN SİL
       # ==========================================
-      - name: Edge Tarayicisini ve Kisayollarini Komple Sil
+      - name: Edge Sökümü
         run: |
           Write-Host "Microsoft Edge ve tum kalintilari siliniyor..."
           Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
@@ -41,12 +41,12 @@ jobs:
           Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
           exit 0
 
-      - name: Tailscale'i Başlat
+      - name: Tailscale Ağı
         uses: tailscale/github-action@v3
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
-      - name: Kullanıcı Oluştur, Full Admin Yap ve RDP'yi Etkinleştir
+      - name: Admin ve RDP Kurulumu
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
@@ -60,9 +60,9 @@ jobs:
           exit 0
 
       # ==========================================
-      # 3. SADECE SERVİSLERİ KAPAT (GÜÇ PLANI SİLİNDİ)
+      # 3. SERVİSLERİ KAPAT
       # ==========================================
-      - name: Gereksiz Servisleri Kapat
+      - name: Servis Optimizasyonu
         run: |
           Write-Host "Sistemi sömüren gereksiz servisler ve Docker kapatiliyor..."
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "MapsBroker", "lfsvc", "docker")
@@ -73,9 +73,9 @@ jobs:
           exit 0
 
       # ==========================================
-      # 4. GELİŞMİŞ RDP VE AĞ GECİKMESİNİ DÜŞÜRME
+      # 4. AĞ VE RDP HIZLANDIRMA
       # ==========================================
-      - name: Gelismis RDP ve Ag Optimizasyonu
+      - name: Ağ Optimizasyonu
         run: |
           Write-Host "RDP Gecikme ve Ag Optimizasyonlari yapiliyor..."
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
@@ -89,9 +89,9 @@ jobs:
           exit 0
 
       # ==========================================
-      # 5. KARANLIK MOD VE YEREL DÜZ SİYAH DUVAR KAĞIDI
+      # 5. KARANLIK MOD VE DUVAR KAĞIDI
       # ==========================================
-      - name: Karanlik Mod ve Duz Siyah Duvar Kagidi Zorlayici
+      - name: Karanlık Tema
         run: |
           Write-Host "Duz siyah duvar kagidi olusturuluyor..."
           $wallpaperPath = "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg"
@@ -137,7 +137,7 @@ jobs:
       # ==========================================
       # 6. MASAÜSTÜNE SADECE CHROME EKLE
       # ==========================================
-      - name: Masaustune Sadece Chrome Ekle
+      - name: Chrome Kısayolu
         run: |
           $chromePath = ""
           try {
@@ -163,9 +163,9 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. GÜVENLİK, KAMERA/MİKROFON KÖKTEN KAPATMA (PAGEFILE SİLİNDİ)
+      # 7. GÜVENLİK VE GİZLİLİK
       # ==========================================
-      - name: Guvenlik ve Gizlilik Ayarlari
+      - name: Gizlilik Duvarı
         run: |
           $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
           if (-not (Test-Path $telPath)) { New-Item -Path $telPath -Force -ErrorAction SilentlyContinue | Out-Null }
@@ -180,7 +180,7 @@ jobs:
           vssadmin delete shadows /all /quiet
           exit 0
 
-      - name: Bağlantı Bilgilerini Göster
+      - name: Giriş Bilgileri
         run: |
           Write-Host "===================================="
           Write-Host "  ERROR-4004 ULTIMATE PERFORMANS    "
@@ -193,7 +193,7 @@ jobs:
           Write-Host "Sistem hazir! Lutfen RDP ile baglanin."
           exit 0
           
-      - name: Sistemi 60 Saat Boyunca Açık Tut
+      - name: 60 Saat Bekleme
         run: |
           Write-Host "Islem tamam. 60 saat uyku basliyor..."
           Start-Sleep -Seconds 216000 
