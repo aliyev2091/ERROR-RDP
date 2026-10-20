@@ -10,19 +10,25 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. DETAYLI SİSTEM BİLGİLERİ
+      # 1. DETAYLI SİSTEM BİLGİLERİ VE PAGEFILE KANITI
       # ==========================================
       - name: DETAYLI SISTEM DONANIM BILGILERI
         run: |
           Write-Host "================================================================="
-          Write-Host "                 DETAYLI SISTEM BILGILERI                        "
+          Write-Host "                 PAGEFILE KONTROL MERKEZI                        "
           Write-Host "================================================================="
           $os = Get-CimInstance -ClassName Win32_OperatingSystem
           Write-Host "[+] Isletim Sistemi : $($os.Caption) (Build: $($os.BuildNumber))"
-          $cpu = Get-CimInstance -ClassName Win32_Processor
-          Write-Host "[+] Islemci (CPU)   : $($cpu.Name)"
-          $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
-          Write-Host "[+] RAM Miktari     : $ram GB"
+          
+          Write-Host "Mevcut Pagefile Konumu ve Boyutu:"
+          $pf = Get-CimInstance -ClassName Win32_PageFileUsage -ErrorAction SilentlyContinue
+          if ($pf) {
+              foreach ($p in $pf) {
+                  Write-Host "    -> Yol: $($p.Name) | Ayrilan Alan: $($p.AllocatedBaseSize) MB"
+              }
+          } else {
+              Write-Host "    -> Sistemde aktif bir Pagefile bulunamadi."
+          }
           Write-Host "================================================================="
           exit 0
 
@@ -147,9 +153,7 @@ jobs:
       # ==========================================
       - name: Masaustune Sadece Chrome Ekle
         run: |
-          Write-Host "WScript.Shell bileseni kontrol ediliyor ve onariliyor..."
           cmd.exe /c "regsvr32 /s wshom.ocx" > $null 2>&1
-          
           $chromePath = ""
           try {
               $appPath = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction Stop
@@ -166,23 +170,19 @@ jobs:
                   $Shortcut = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Google Chrome.lnk")
                   $Shortcut.TargetPath = $chromePath
                   $Shortcut.Save()
-                  
                   New-Item -ItemType Directory -Force -Path "C:\Users\Public\Desktop" | Out-Null
                   $Shortcut2 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Google Chrome.lnk")
                   $Shortcut2.TargetPath = $chromePath
                   $Shortcut2.Save()
-                  Write-Host "Chrome kisayolu basariyla olusturuldu."
-              } catch {
-                  Write-Host "WScript.Shell hatasi: Kisayol olusturulamadi, ancak isleme devam ediliyor."
-              }
+              } catch {}
           }
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           exit 0
 
       # ==========================================
-      # 7. SANAL BELLEK (PAGEFILE) 16 MB'A SABITLEME (v114)
+      # 7. SANAL BELLEK (PAGEFILE) D: SÜRÜCÜSÜNE TAŞIMA (v115)
       # ==========================================
-      - name: Sanal Bellek (Pagefile) 16 MB'a Sabitleme ve Gizlilik
+      - name: Sanal Bellek (Pagefile) D: Surucusune Tasi
         run: |
           Write-Host "Gizlilik ayarlari yapiliyor..."
           $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
@@ -194,14 +194,15 @@ jobs:
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessCamera" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessMicrophone" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          Write-Host "Windows'un inadi kiriliyor: Pagefile 16 MB'a sabitleniyor..."
-          # 1. Otomatik yonetimi kapat
+          Write-Host "Pagefile C: surucusunden alinip D: surucusune tasiniyor..."
+          
+          # Otomatik yonetimi kapat
           $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
           if ($cs) {
               Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile = $false} -ErrorAction SilentlyContinue
           }
 
-          # 2. Var olan ayarlari sil
+          # Var olan ayarlari sil
           $pageFiles = Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue
           if ($pageFiles) {
               foreach ($pf in $pageFiles) {
@@ -209,11 +210,11 @@ jobs:
               }
           }
 
-          # 3. Kayit defterine "C:\pagefile.sys 16 16" (Yani min 16 MB, max 16 MB) yaz
-          Write-Host "Kayit defteri uzerinden 16 MB siniri konuluyor..."
+          # Kayit defterine D: surucusunde 2048 MB (2 GB) boyutunda pagefile tanimla
+          # (D: surucusu gecicidir, GitHub Actions bittiginde silinir, C: diski tertemiz kalir)
           $memPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
-          Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value "C:\pagefile.sys 16 16" -Type MultiString -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $memPath -Name "ExistingPageFiles" -Value "C:\pagefile.sys" -Type MultiString -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value "D:\pagefile.sys 2048 4096" -Type MultiString -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $memPath -Name "ExistingPageFiles" -Value "D:\pagefile.sys" -Type MultiString -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "ClearPageFileAtShutdown" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "DisablePagingExecutive" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
           
@@ -221,7 +222,7 @@ jobs:
           powercfg -h off
           vssadmin delete shadows /all /quiet
           
-          Write-Host "Pagefile islemi tamamlandi! Diskte 16 MB'dan fazla yer kaplamayacak."
+          Write-Host "Pagefile islemi tamamlandi! C: surucusu rahatladi."
           exit 0
 
       - name: Bağlantı Bilgilerini Göster
