@@ -46,7 +46,7 @@ jobs:
 
       - name: Servisleri Kapat ve Ultimate Guc Plani
         run: |
-          # 1. Gereksiz servisleri kapat (Docker hatasını önleyerek)
+          # 1. Gereksiz servisleri kapat (Hata kontrolü ile)
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc", "docker")
           foreach ($svc in $services) { 
             if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
@@ -55,23 +55,28 @@ jobs:
             }
           }
           
-          # 2. Ultimate Performance planının görünür olmasını sağla
-          cmd.exe /c "reg add `"HKLM\System\CurrentControlSet\Control\Power`" /v PlatformAoAcOverride /t REG_DWORD /d 0 /f" > $null 2>&1
+          Write-Host "Ultimate Performance plani zorla aktif ediliyor..."
           
-          # 3. Planı oluştur ve aktif et
+          # 2. Gizli planı görünür yap ve oluştur
+          cmd.exe /c "reg add `"HKLM\System\CurrentControlSet\Control\Power`" /v PlatformAoAcOverride /t REG_DWORD /d 0 /f" > $null 2>&1
           cmd.exe /c "powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           cmd.exe /c "powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           
-          # 4. Kayit defterine (Registry) zorla muhurle
+          # 3. Kayit defterine (Registry) muhurle
           $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes"
           if (Test-Path $regPath) {
               Set-ItemProperty -Path $regPath -Name "ActivePowerScheme" -Value "e9a42b02-d5df-448d-aa00-03f14749eb61" -Force -ErrorAction SilentlyContinue
           }
           
-          # 5. Grup ilkesiyle guclendir
+          # 4. Grup Ilkesi (GPO) ile kullanici degistiremesin
           $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings"
           if (-not (Test-Path $policyPath)) { New-Item -Path $policyPath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $policyPath -Name "ActivePowerScheme" -Value "e9a42b02-d5df-448d-aa00-03f14749eb61" -Force -ErrorAction SilentlyContinue
+          
+          # 5. RDP oturumunda plan degisikligini engelle
+          $rdpPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          if (-not (Test-Path $rdpPolicyPath)) { New-Item -Path $rdpPolicyPath -Force -ErrorAction SilentlyContinue | Out-Null }
+          Set-ItemProperty -Path $rdpPolicyPath -Name "fDisablePowerManagement" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
           
           exit 0
 
