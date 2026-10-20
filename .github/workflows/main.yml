@@ -46,7 +46,7 @@ jobs:
 
       - name: Servisleri Kapat
         run: |
-          # Gereksiz servisleri kapat (Hata kontrolü ile)
+          # Gereksiz servisleri kapat
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc", "docker")
           foreach ($svc in $services) { 
             if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
@@ -78,26 +78,26 @@ jobs:
           $graphics.Dispose()
           $bmp.Dispose()
 
+          # Zamanlanmis gorev icin kullanilacak script
           $darkModeScript = @"
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath"
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "10"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper" -Value "0"
-          `$code = @'
-          [DllImport("user32.dll", CharSet = CharSet.Auto)]
-          public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
-          '@
-          `$type = Add-Type -MemberDefinition `$code -Name "Win32" -Namespace Win32Functions -PassThru
-          `$type::SystemParametersInfo(20, 0, "$wallpaperPath", 3)
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
           "@
           Set-Content -Path "C:\darkmode.ps1" -Value $darkModeScript
           
-          $runOncePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
-          if (-not (Test-Path $runOncePath)) { New-Item -Path $runOncePath -Force -ErrorAction SilentlyContinue | Out-Null }
-          Set-ItemProperty -Path $runOncePath -Name "ForceDarkMode" -Value "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\darkmode.ps1" -Force
+          Write-Host "Karanlik mod icin Zamanlanmis Gorev olusturuluyor..."
+          $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File C:\darkmode.ps1"
+          $trigger = New-ScheduledTaskTrigger -AtLogOn
+          $principal = New-ScheduledTaskPrincipal -UserId "ERROR-4004" -LogonType Interactive
           
+          # Gorevi olustur (Hata verirse devam et)
+          Register-ScheduledTask -TaskName "ForceDarkMode" -Action $action -Trigger $trigger -Principal $principal -Force -ErrorAction SilentlyContinue
+          
+          # Su anki runner kullanicisi icin de hemen uygula
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath" -ErrorAction SilentlyContinue
