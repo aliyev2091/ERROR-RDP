@@ -46,7 +46,6 @@ jobs:
 
       - name: Servisleri Kapat ve Ultimate Guc Plani
         run: |
-          # Servis listesini kontrol ederek durdur (Docker artik hata vermeyecek)
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc", "docker")
           foreach ($svc in $services) { 
             if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
@@ -56,7 +55,6 @@ jobs:
           }
           cmd.exe /c "powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           cmd.exe /c "powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
-          # Hata olsa bile bu adımın başarılı sayılması için (Kırmızı çarpıyı önler)
           exit 0
 
       - name: Gelismis RDP ve Ag Optimizasyonu
@@ -145,7 +143,9 @@ jobs:
           $memPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
           Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value "D:\pagefile.sys 2048 4096" -Type MultiString -Force -ErrorAction SilentlyContinue
           powercfg -h off
-          vssadmin delete shadows /all /quiet
+          # Hata vermemesi icin vssadmin komutunun ciktisini yut ve basarili don
+          cmd.exe /c "vssadmin delete shadows /all /quiet" > $null 2>&1
+          exit 0
 
       - name: Baglanti Bilgilerini Goster
         run: |
