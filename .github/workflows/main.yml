@@ -9,14 +9,32 @@ jobs:
     timeout-minutes: 3600
 
     steps:
-      - name: SISTEM BILGILERI
+      # ==========================================
+      # 1. DETAYLI SİSTEM BİLGİLERİ
+      # ==========================================
+      - name: DETAYLI SISTEM DONANIM BILGILERI
         run: |
-          Write-Host "Sistem Bilgileri Yukleniyor..."
+          Write-Host "================================================================="
+          Write-Host "                 DETAYLI SISTEM BILGILERI                        "
+          Write-Host "================================================================="
           $os = Get-CimInstance -ClassName Win32_OperatingSystem
-          Write-Host "Isletim Sistemi: $($os.Caption)"
-          
-      - name: Edge Tarayicisini Komple Sil
+          Write-Host "[+] Isletim Sistemi : $($os.Caption) (Build: $($os.BuildNumber))"
+          $cpu = Get-CimInstance -ClassName Win32_Processor
+          Write-Host "[+] Islemci (CPU)   : $($cpu.Name)"
+          Write-Host "    -> Cekirdek      : $($cpu.NumberOfCores) Fiziksel / $($cpu.NumberOfLogicalProcessors) Mantiksal"
+          $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
+          Write-Host "[+] RAM Miktari     : $ram GB"
+          $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
+          Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
+          Write-Host "================================================================="
+          exit 0
+
+      # ==========================================
+      # 2. EDGE TARAYICISINI VE KISAYOLLARINI KÖKÜNDEN SİL
+      # ==========================================
+      - name: Edge Tarayicisini ve Kisayollarini Komple Sil
         run: |
+          Write-Host "Microsoft Edge ve tum kalintilari siliniyor..."
           Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\Default\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
@@ -24,13 +42,14 @@ jobs:
           Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
+          exit 0
 
       - name: Tailscale'i Baslat
         uses: tailscale/github-action@v3
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
-      - name: Kullanici Olustur ve RDP Ac
+      - name: Kullanici Olustur, Full Admin Yap ve RDP Ac
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
@@ -43,10 +62,14 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
+          exit 0
 
+      # ==========================================
+      # 3. TEMEL PERFORMANS VE SERVİS KAPATMA
+      # ==========================================
       - name: Servisleri Kapat
         run: |
-          # Gereksiz servisleri kapat
+          Write-Host "Gereksiz servisler kapatiliyor..."
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc", "docker")
           foreach ($svc in $services) { 
             if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
@@ -56,8 +79,12 @@ jobs:
           }
           exit 0
 
+      # ==========================================
+      # 4. GELİŞMİŞ RDP VE AĞ GECİKMESİNİ DÜŞÜRME
+      # ==========================================
       - name: Gelismis RDP ve Ag Optimizasyonu
         run: |
+          Write-Host "RDP Gecikme ve Ag Optimizasyonlari yapiliyor..."
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fEnableRemoteFX" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
@@ -66,19 +93,26 @@ jobs:
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
           ipconfig /flushdns
+          exit 0
 
+      # ==========================================
+      # 5. KARANLIK MOD VE SİYAH DUVAR KAĞIDI
+      # ==========================================
       - name: Karanlik Mod ve Siyah Duvar Kagidi
         run: |
+          Write-Host "Duz siyah duvar kagidi olusturuluyor..."
           $wallpaperPath = "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg"
-          Add-Type -AssemblyName System.Drawing
-          $bmp = New-Object System.Drawing.Bitmap 1920, 1080
-          $graphics = [System.Drawing.Graphics]::FromImage($bmp)
-          $graphics.Clear([System.Drawing.Color]::FromArgb(25, 25, 25))
-          $bmp.Save($wallpaperPath, [System.Drawing.Imaging.ImageFormat]::Jpeg)
-          $graphics.Dispose()
-          $bmp.Dispose()
+          
+          try {
+              Add-Type -AssemblyName System.Drawing
+              $bmp = New-Object System.Drawing.Bitmap 1920, 1080
+              $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+              $graphics.Clear([System.Drawing.Color]::FromArgb(25, 25, 25))
+              $bmp.Save($wallpaperPath, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+              $graphics.Dispose()
+              $bmp.Dispose()
+          } catch {}
 
-          # Zamanlanmis gorev icin kullanilacak script
           $darkModeScript = @"
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
@@ -94,7 +128,6 @@ jobs:
           $trigger = New-ScheduledTaskTrigger -AtLogOn
           $principal = New-ScheduledTaskPrincipal -UserId "ERROR-4004" -LogonType Interactive
           
-          # Gorevi olustur (Hata verirse devam et)
           Register-ScheduledTask -TaskName "ForceDarkMode" -Action $action -Trigger $trigger -Principal $principal -Force -ErrorAction SilentlyContinue
           
           # Su anki runner kullanicisi icin de hemen uygula
@@ -102,10 +135,15 @@ jobs:
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath" -ErrorAction SilentlyContinue
           RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
+          exit 0
 
+      # ==========================================
+      # 6. MASAÜSTÜNE SADECE CHROME EKLE
+      # ==========================================
       - name: Masaustune Sadece Chrome Ekle
         shell: powershell
         run: |
+          Write-Host "Chrome kisayolu olusturuluyor..."
           $chromePath = ""
           if (Test-Path "C:\Program Files\Google\Chrome\Application\chrome.exe") { 
               $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe" 
@@ -126,16 +164,39 @@ jobs:
               $Shortcut2.Save()
           }
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          exit 0
+
+      # ==========================================
+      # 7. GÜVENLİK, GİZLİLİK (KAMERA/MİKROFON) KAPATMA
+      # ==========================================
+      - name: Guvenlik ve Gizlilik Ayarlari
+        run: |
+          Write-Host "Windows Telemetri kapatiliyor..."
+          $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
+          if (-not (Test-Path $telPath)) { New-Item -Path $telPath -Force -ErrorAction SilentlyContinue | Out-Null }
+          Set-ItemProperty -Path $telPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          
+          Write-Host "Kamera ve Mikrofon izinleri kapatiliyor..."
+          $privacyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy"
+          if (-not (Test-Path $privacyPath)) { New-Item -Path $privacyPath -Force -ErrorAction SilentlyContinue | Out-Null }
+          Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessCamera" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessMicrophone" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
+          exit 0
 
       - name: Baglanti Bilgilerini Goster
         run: |
+          Write-Host "===================================="
+          Write-Host "     ERROR-4004 HIZLI TEMİZLİK      "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
           Write-Host "Kullanici Adi : ERROR-4004"
           Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
           Write-Host "===================================="
+          Write-Host "Sistem hazir! Lutfen RDP ile baglanin."
+          exit 0
 
       - name: Sistemi Acik Tut
         run: |
+          Write-Host "Islem tamam. 60 saat uyku basliyor..."
           Start-Sleep -Seconds 216000
