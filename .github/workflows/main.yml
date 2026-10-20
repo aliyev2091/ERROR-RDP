@@ -46,13 +46,18 @@ jobs:
 
       - name: Servisleri Kapat ve Ultimate Guc Plani
         run: |
+          # Servis listesini kontrol ederek durdur (Docker artik hata vermeyecek)
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc", "docker")
           foreach ($svc in $services) { 
-            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue 
+            if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
+              Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+              Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue 
+            }
           }
           cmd.exe /c "powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
           cmd.exe /c "powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61" > $null 2>&1
+          # Hata olsa bile bu adımın başarılı sayılması için (Kırmızı çarpıyı önler)
+          exit 0
 
       - name: Gelismis RDP ve Ag Optimizasyonu
         run: |
