@@ -180,7 +180,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. SANAL BELLEK (PAGEFILE) KÖKTEN SİLME (v112 - TAM KİLİT KIRMA)
+      # 7. SANAL BELLEK (PAGEFILE) KÖKTEN SİLME (v113 - TAM KİLİT KIRMA)
       # ==========================================
       - name: Sanal Bellek (Pagefile) Kokten Silme ve Gizlilik
         run: |
@@ -255,22 +255,22 @@ jobs:
           }
 
           Write-Host "5. Adim: Var olan Pagefile ayarlari siliniyor (CIM)..."
+          # Bu sefer Remove-CimInstance yerine Invoke-CimMethod kullanarak siliyoruz (daha agresif)
           $pageFiles = Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue
           if ($pageFiles) {
               foreach ($pf in $pageFiles) {
-                  Remove-CimInstance -InputObject $pf -ErrorAction SilentlyContinue
+                  Invoke-CimMethod -InputObject $pf -MethodName Delete -ErrorAction SilentlyContinue
               }
           }
 
           Write-Host "6. Adim: Kayit defteri kalintilari agresif temizleniyor..."
           $memPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
-          # PagingFiles degerini bos bir dizeye ayarla (Windows'un olusturmasini engeller)
-          Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value " " -Type MultiString -Force -ErrorAction SilentlyContinue
+          # PagingFiles degerini bos bir diziye ayarla (Windows'un olusturmasini engeller)
+          Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "ExistingPageFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "PagefileOnOsVolume" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "ClearPageFileAtShutdown" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "DisablePagingExecutive" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
-          # Yeni: Gecici pagefile olusturulmasini engelle
           Set-ItemProperty -Path $memPath -Name "TempPageFile" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           
           Write-Host "7. Adim: Hazirda Bekletme (Hibernation) kapatiliyor..."
