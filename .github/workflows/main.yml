@@ -143,7 +143,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 6. MASAÜSTÜNE SADECE CHROME EKLE (HATA DÜZELTİLDİ)
+      # 6. MASAÜSTÜNE SADECE CHROME EKLE
       # ==========================================
       - name: Masaustune Sadece Chrome Ekle
         run: |
@@ -180,9 +180,9 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. SANAL BELLEK (PAGEFILE) KÖKTEN SİLME (v113 - TAM KİLİT KIRMA)
+      # 7. SANAL BELLEK (PAGEFILE) 16 MB'A SABITLEME (v114)
       # ==========================================
-      - name: Sanal Bellek (Pagefile) Kokten Silme ve Gizlilik
+      - name: Sanal Bellek (Pagefile) 16 MB'a Sabitleme ve Gizlilik
         run: |
           Write-Host "Gizlilik ayarlari yapiliyor..."
           $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
@@ -194,68 +194,14 @@ jobs:
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessCamera" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessMicrophone" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          Write-Host "Pagefile silme islemi icin ozel izin etkinlestiriliyor..."
-          $adjustTokenPrivileges = @"
-          using System;
-          using System.Runtime.InteropServices;
-          public class TokenManipulator {
-              [DllImport("advapi32.dll", ExactSpelling = true, SetLastError = true)]
-              internal static extern bool AdjustTokenPrivileges(IntPtr htok, bool disall, ref TokPriv1Luid newst, int len, IntPtr prev, IntPtr relen);
-              [DllImport("kernel32.dll", ExactSpelling = true)]
-              internal static extern IntPtr GetCurrentProcess();
-              [DllImport("advapi32.dll", ExactSpelling = true, SetLastError = true)]
-              internal static extern bool OpenProcessToken(IntPtr h, int acc, ref IntPtr phtok);
-              [DllImport("advapi32.dll", SetLastError = true)]
-              internal static extern bool LookupPrivilegeValue(string host, string name, ref long pluid);
-              [StructLayout(LayoutKind.Sequential, Pack = 1)]
-              internal struct TokPriv1Luid {
-                  public int Count;
-                  public long Luid;
-                  public int Attr;
-              }
-              internal const int SE_PRIVILEGE_ENABLED = 0x00000002;
-              internal const int TOKEN_QUERY = 0x00000008;
-              internal const int TOKEN_ADJUST_PRIVILEGES = 0x00000020;
-              public static bool AddPrivilege(string privilege) {
-                  try {
-                      bool retVal;
-                      TokPriv1Luid tp;
-                      IntPtr hproc = GetCurrentProcess();
-                      IntPtr htok = IntPtr.Zero;
-                      retVal = OpenProcessToken(hproc, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, ref htok);
-                      tp.Count = 1;
-                      tp.Luid = 0;
-                      tp.Attr = SE_PRIVILEGE_ENABLED;
-                      retVal = LookupPrivilegeValue(null, privilege, ref tp.Luid);
-                      retVal = AdjustTokenPrivileges(htok, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
-                      return retVal;
-                  } catch (Exception ex) {
-                      throw ex;
-                  }
-              }
-          }
-          "@
-          Add-Type -TypeDefinition $adjustTokenPrivileges -ErrorAction SilentlyContinue
-          [TokenManipulator]::AddPrivilege("SeCreatePagefilePrivilege")
-
-          Write-Host "1. Adim: Windows Kurtarma Ortami (WinRE) devre disi birakiliyor..."
-          cmd.exe /c "reagentc /disable" > $null 2>&1
-
-          Write-Host "2. Adim: Bootloader uzerinden cokme raporu kapatiliyor..."
-          cmd.exe /c "bcdedit /set {default} recoveryenabled No" > $null 2>&1
-          cmd.exe /c "bcdedit /set {default} bootstatuspolicy ignoreallfailures" > $null 2>&1
-
-          Write-Host "3. Adim: Cokme Dokumu (Crash Dump) kapatiliyor..."
-          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name "CrashDumpEnabled" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-
-          Write-Host "4. Adim: Otomatik Pagefile yonetimi kapatiliyor (CIM)..."
+          Write-Host "Windows'un inadi kiriliyor: Pagefile 16 MB'a sabitleniyor..."
+          # 1. Otomatik yonetimi kapat
           $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
           if ($cs) {
               Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile = $false} -ErrorAction SilentlyContinue
           }
 
-          Write-Host "5. Adim: Var olan Pagefile ayarlari siliniyor (CIM)..."
-          # Bu sefer Remove-CimInstance yerine Invoke-CimMethod kullanarak siliyoruz (daha agresif)
+          # 2. Var olan ayarlari sil
           $pageFiles = Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue
           if ($pageFiles) {
               foreach ($pf in $pageFiles) {
@@ -263,21 +209,19 @@ jobs:
               }
           }
 
-          Write-Host "6. Adim: Kayit defteri kalintilari agresif temizleniyor..."
+          # 3. Kayit defterine "C:\pagefile.sys 16 16" (Yani min 16 MB, max 16 MB) yaz
+          Write-Host "Kayit defteri uzerinden 16 MB siniri konuluyor..."
           $memPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
-          # PagingFiles degerini bos bir diziye ayarla (Windows'un olusturmasini engeller)
-          Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $memPath -Name "ExistingPageFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $memPath -Name "PagefileOnOsVolume" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value "C:\pagefile.sys 16 16" -Type MultiString -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $memPath -Name "ExistingPageFiles" -Value "C:\pagefile.sys" -Type MultiString -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "ClearPageFileAtShutdown" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "DisablePagingExecutive" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $memPath -Name "TempPageFile" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          Write-Host "7. Adim: Hazirda Bekletme (Hibernation) kapatiliyor..."
+          Write-Host "Hazirda Bekletme (Hibernation) kapatiliyor..."
           powercfg -h off
           vssadmin delete shadows /all /quiet
           
-          Write-Host "Pagefile islemi tamamlandi. Windows'un inadi kirildi!"
+          Write-Host "Pagefile islemi tamamlandi! Diskte 16 MB'dan fazla yer kaplamayacak."
           exit 0
 
       - name: Bağlantı Bilgilerini Göster
