@@ -143,10 +143,14 @@ jobs:
           exit 0
 
       # ==========================================
-      # 6. MASAÜSTÜNE SADECE CHROME EKLE
+      # 6. MASAÜSTÜNE SADECE CHROME EKLE (v111 - HATA DÜZELTİLDİ)
       # ==========================================
       - name: Masaustune Sadece Chrome Ekle
         run: |
+          Write-Host "WScript.Shell bileseni kontrol ediliyor ve onariliyor..."
+          # WScript.Shell bilesenini yeniden kaydet (Hata 80040154 icin)
+          cmd.exe /c "regsvr32 /s wshom.ocx" > $null 2>&1
+          
           $chromePath = ""
           try {
               $appPath = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction Stop
@@ -157,15 +161,22 @@ jobs:
           }
 
           if ($chromePath -ne "") {
-              $WshShell = New-Object -ComObject WScript.Script
-              New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
-              $Shortcut = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Google Chrome.lnk")
-              $Shortcut.TargetPath = $chromePath
-              $Shortcut.Save()
-              New-Item -ItemType Directory -Force -Path "C:\Users\Public\Desktop" | Out-Null
-              $Shortcut2 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Google Chrome.lnk")
-              $Shortcut2.TargetPath = $chromePath
-              $Shortcut2.Save()
+              # Hata olsa bile kodun devam etmesi icin try-catch icine aliyoruz
+              try {
+                  $WshShell = New-Object -ComObject WScript.Shell
+                  New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
+                  $Shortcut = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Google Chrome.lnk")
+                  $Shortcut.TargetPath = $chromePath
+                  $Shortcut.Save()
+                  
+                  New-Item -ItemType Directory -Force -Path "C:\Users\Public\Desktop" | Out-Null
+                  $Shortcut2 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Google Chrome.lnk")
+                  $Shortcut2.TargetPath = $chromePath
+                  $Shortcut2.Save()
+                  Write-Host "Chrome kisayolu basariyla olusturuldu."
+              } catch {
+                  Write-Host "WScript.Shell hatasi: Kisayol olusturulamadi, ancak isleme devam ediliyor."
+              }
           }
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           exit 0
@@ -255,7 +266,6 @@ jobs:
 
           Write-Host "6. Adim: Kayit defterine 0 MB zorlamasi yapiliyor..."
           $memPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
-          # C: surucusunde 0 MB'lik bir pagefile tanimla (Sanki varmis gibi ama boyutu sifir)
           Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value "C:\pagefile.sys 0 0" -Type MultiString -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "ExistingPageFiles" -Value "C:\pagefile.sys" -Type MultiString -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "PagefileOnOsVolume" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
