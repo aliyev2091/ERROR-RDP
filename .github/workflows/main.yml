@@ -6,59 +6,34 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 3600 # 60 saat
+    timeout-minutes: 3600
     
     steps:
-      # ==========================================
-      # 1. DETAYLI SİSTEM BİLGİLERİ (EKSİKLER TAMAMLANDI)
-      # ==========================================
       - name: Sistem Özeti
         run: |
-          Write-Host "================================================================="
-          Write-Host "                 DETAYLI SISTEM BILGILERI                        "
-          Write-Host "================================================================="
-          
-          # 1. İşletim Sistemi
           $os = Get-CimInstance -ClassName Win32_OperatingSystem
-          Write-Host "[+] Isletim Sistemi : $($os.Caption) (Build: $($os.BuildNumber))"
+          Write-Host "OS: $($os.Caption) (Build: $($os.BuildNumber))"
           
-          # 2. İşlemci ve Çekirdek
           $cpu = Get-CimInstance -ClassName Win32_Processor
-          Write-Host "[+] Islemci (CPU)   : $($cpu.Name)"
-          Write-Host "    -> Cekirdek      : $($cpu.NumberOfCores) Fiziksel / $($cpu.NumberOfLogicalProcessors) Mantiksal"
+          Write-Host "CPU: $($cpu.Name) | Cekirdek: $($cpu.NumberOfCores) Fiziksel / $($cpu.NumberOfLogicalProcessors) Mantiksal"
           
-          # 3. RAM
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
-          Write-Host "[+] RAM Miktari     : $ram GB"
+          Write-Host "RAM: $ram GB"
           
-          # 4. Fiziksel Disk ve Disk Tipi (SSD/HDD)
-          Write-Host "-----------------------------------------------------------------"
-          Write-Host "[+] Fiziksel Diskler:"
           $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object FriendlyName, MediaType, BusType, @{Name="SizeGB";Expression={[math]::Round($_.Size/1GB, 2)}}
-          if ($disks) {
-              foreach ($disk in $disks) {
-                  $media = if (-not $disk.MediaType) { "Bilinmiyor" } else { $disk.MediaType }
-                  Write-Host "    -> $($disk.FriendlyName) | Tip: $media | Baglanti: $($disk.BusType) | Boyut: $($disk.SizeGB) GB"
-              }
-          } else {
-              Write-Host "    -> Fiziksel disk bilgisi alinamadi."
+          foreach ($disk in $disks) {
+              $media = if (-not $disk.MediaType) { "Bilinmiyor" } else { $disk.MediaType }
+              Write-Host "Disk: $($disk.FriendlyName) | Tip: $media | Baglanti: $($disk.BusType) | Boyut: $($disk.SizeGB) GB"
           }
           
-          # 5. C: Sürücüsü Detayları
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
           $freeGB = [math]::Round($diskC.FreeSpace / 1GB, 2)
           $totalGB = [math]::Round($diskC.Size / 1GB, 2)
-          Write-Host "-----------------------------------------------------------------"
-          Write-Host "[+] C: Surucusu     : $freeGB GB Bos / $totalGB GB Toplam"
-          Write-Host "================================================================="
+          Write-Host "C: $freeGB GB Bos / $totalGB GB Toplam"
           exit 0
 
-      # ==========================================
-      # 2. EDGE TARAYICISINI KÖKÜNDEN SİL
-      # ==========================================
       - name: Edge Sökümü
         run: |
-          Write-Host "Microsoft Edge ve tum kalintilari siliniyor..."
           Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\Default\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
@@ -86,12 +61,8 @@ jobs:
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
           exit 0
 
-      # ==========================================
-      # 3. SERVİSLERİ KAPAT
-      # ==========================================
       - name: Servis Optimizasyonu
         run: |
-          Write-Host "Sistemi sömüren gereksiz servisler ve Docker kapatiliyor..."
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "MapsBroker", "lfsvc", "docker")
           foreach ($svc in $services) { 
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
@@ -99,12 +70,8 @@ jobs:
           }
           exit 0
 
-      # ==========================================
-      # 4. AĞ VE RDP HIZLANDIRMA
-      # ==========================================
       - name: Ağ Optimizasyonu
         run: |
-          Write-Host "RDP Gecikme ve Ag Optimizasyonlari yapiliyor..."
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fEnableRemoteFX" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
@@ -115,14 +82,9 @@ jobs:
           ipconfig /flushdns
           exit 0
 
-      # ==========================================
-      # 5. KARANLIK MOD VE DUVAR KAĞIDI
-      # ==========================================
       - name: Karanlık Tema
         run: |
-          Write-Host "Duz siyah duvar kagidi olusturuluyor..."
           $wallpaperPath = "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg"
-          
           try {
               Add-Type -AssemblyName System.Drawing
               $bmp = New-Object System.Drawing.Bitmap 1920, 1080
@@ -139,14 +101,12 @@ jobs:
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "10"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper" -Value "0"
-          
           `$code = @'
           [DllImport("user32.dll", CharSet = CharSet.Auto)]
           public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
           '@
           `$type = Add-Type -MemberDefinition `$code -Name "Win32" -Namespace Win32Functions -PassThru
           `$type::SystemParametersInfo(20, 0, "$wallpaperPath", 3)
-          
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
           "@
           Set-Content -Path "C:\darkmode.ps1" -Value $darkModeScript
@@ -161,9 +121,6 @@ jobs:
           RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
           exit 0
 
-      # ==========================================
-      # 6. MASAÜSTÜNE SADECE CHROME EKLE
-      # ==========================================
       - name: Chrome Kısayolu
         run: |
           $chromePath = ""
@@ -189,9 +146,6 @@ jobs:
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           exit 0
 
-      # ==========================================
-      # 7. GÜVENLİK VE GİZLİLİK
-      # ==========================================
       - name: Gizlilik Duvarı
         run: |
           $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
@@ -209,18 +163,11 @@ jobs:
 
       - name: Giriş Bilgileri
         run: |
-          Write-Host "===================================="
-          Write-Host "  ERROR-4004 ULTIMATE PERFORMANS    "
-          Write-Host "===================================="
-          Write-Host "Tailscale IP:"
-          tailscale ip -4
-          Write-Host "Kullanici Adi : ERROR-4004"
-          Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
-          Write-Host "===================================="
-          Write-Host "Sistem hazir! Lutfen RDP ile baglanin."
+          Write-Host "IP: $(tailscale ip -4)"
+          Write-Host "Kullanici: ERROR-4004"
+          Write-Host "Parola: Secrets uzerinden giriniz"
           exit 0
           
-      - name: 60 Saat Bekleme
+      - name: Bekleme
         run: |
-          Write-Host "Islem tamam. 60 saat uyku basliyor..."
           Start-Sleep -Seconds 216000 
