@@ -143,12 +143,11 @@ jobs:
           exit 0
 
       # ==========================================
-      # 6. MASAÜSTÜNE SADECE CHROME EKLE (v111 - HATA DÜZELTİLDİ)
+      # 6. MASAÜSTÜNE SADECE CHROME EKLE (HATA DÜZELTİLDİ)
       # ==========================================
       - name: Masaustune Sadece Chrome Ekle
         run: |
           Write-Host "WScript.Shell bileseni kontrol ediliyor ve onariliyor..."
-          # WScript.Shell bilesenini yeniden kaydet (Hata 80040154 icin)
           cmd.exe /c "regsvr32 /s wshom.ocx" > $null 2>&1
           
           $chromePath = ""
@@ -161,7 +160,6 @@ jobs:
           }
 
           if ($chromePath -ne "") {
-              # Hata olsa bile kodun devam etmesi icin try-catch icine aliyoruz
               try {
                   $WshShell = New-Object -ComObject WScript.Shell
                   New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
@@ -182,7 +180,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. SANAL BELLEK (PAGEFILE) KÖKTEN SİLME (v110 - BCDEDIT VE WINRE)
+      # 7. SANAL BELLEK (PAGEFILE) KÖKTEN SİLME (v112 - TAM KİLİT KIRMA)
       # ==========================================
       - name: Sanal Bellek (Pagefile) Kokten Silme ve Gizlilik
         run: |
@@ -264,13 +262,16 @@ jobs:
               }
           }
 
-          Write-Host "6. Adim: Kayit defterine 0 MB zorlamasi yapiliyor..."
+          Write-Host "6. Adim: Kayit defteri kalintilari agresif temizleniyor..."
           $memPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
-          Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value "C:\pagefile.sys 0 0" -Type MultiString -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $memPath -Name "ExistingPageFiles" -Value "C:\pagefile.sys" -Type MultiString -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $memPath -Name "PagefileOnOsVolume" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+          # PagingFiles degerini bos bir dizeye ayarla (Windows'un olusturmasini engeller)
+          Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value " " -Type MultiString -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $memPath -Name "ExistingPageFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $memPath -Name "PagefileOnOsVolume" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "ClearPageFileAtShutdown" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "DisablePagingExecutive" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+          # Yeni: Gecici pagefile olusturulmasini engelle
+          Set-ItemProperty -Path $memPath -Name "TempPageFile" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           
           Write-Host "7. Adim: Hazirda Bekletme (Hibernation) kapatiliyor..."
           powercfg -h off
