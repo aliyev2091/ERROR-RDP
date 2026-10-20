@@ -157,7 +157,7 @@ jobs:
           }
 
           if ($chromePath -ne "") {
-              $WshShell = New-Object -ComObject WScript.Shell
+              $WshShell = New-Object -ComObject WScript.Script
               New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
               $Shortcut = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Google Chrome.lnk")
               $Shortcut.TargetPath = $chromePath
@@ -171,7 +171,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. SANAL BELLEK (PAGEFILE) KÖKTEN SİLME (v109 - İZİN ZORLAMA)
+      # 7. SANAL BELLEK (PAGEFILE) KÖKTEN SİLME (v110 - BCDEDIT VE WINRE)
       # ==========================================
       - name: Sanal Bellek (Pagefile) Kokten Silme ve Gizlilik
         run: |
@@ -185,8 +185,7 @@ jobs:
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessCamera" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessMicrophone" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          Write-Host "Pagefile silme islemi icin ozel izin (SeCreatePagefilePrivilege) etkinlestiriliyor..."
-          # PowerShell ile ozel ayricalik (Privilege) etkinlestirme
+          Write-Host "Pagefile silme islemi icin ozel izin etkinlestiriliyor..."
           $adjustTokenPrivileges = @"
           using System;
           using System.Runtime.InteropServices;
@@ -230,16 +229,23 @@ jobs:
           Add-Type -TypeDefinition $adjustTokenPrivileges -ErrorAction SilentlyContinue
           [TokenManipulator]::AddPrivilege("SeCreatePagefilePrivilege")
 
-          Write-Host "1. Adim: Cokme Dokumu (Crash Dump) kapatiliyor..."
+          Write-Host "1. Adim: Windows Kurtarma Ortami (WinRE) devre disi birakiliyor..."
+          cmd.exe /c "reagentc /disable" > $null 2>&1
+
+          Write-Host "2. Adim: Bootloader uzerinden cokme raporu kapatiliyor..."
+          cmd.exe /c "bcdedit /set {default} recoveryenabled No" > $null 2>&1
+          cmd.exe /c "bcdedit /set {default} bootstatuspolicy ignoreallfailures" > $null 2>&1
+
+          Write-Host "3. Adim: Cokme Dokumu (Crash Dump) kapatiliyor..."
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name "CrashDumpEnabled" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
 
-          Write-Host "2. Adim: Otomatik Pagefile yonetimi kapatiliyor (CIM)..."
+          Write-Host "4. Adim: Otomatik Pagefile yonetimi kapatiliyor (CIM)..."
           $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
           if ($cs) {
               Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile = $false} -ErrorAction SilentlyContinue
           }
 
-          Write-Host "3. Adim: Var olan Pagefile ayarlari siliniyor (CIM)..."
+          Write-Host "5. Adim: Var olan Pagefile ayarlari siliniyor (CIM)..."
           $pageFiles = Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue
           if ($pageFiles) {
               foreach ($pf in $pageFiles) {
@@ -247,15 +253,16 @@ jobs:
               }
           }
 
-          Write-Host "4. Adim: Kayit defterinden kalintilar temizleniyor (Agresif)..."
+          Write-Host "6. Adim: Kayit defterine 0 MB zorlamasi yapiliyor..."
           $memPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
-          Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $memPath -Name "ExistingPageFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $memPath -Name "PagefileOnOsVolume" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          # C: surucusunde 0 MB'lik bir pagefile tanimla (Sanki varmis gibi ama boyutu sifir)
+          Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value "C:\pagefile.sys 0 0" -Type MultiString -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $memPath -Name "ExistingPageFiles" -Value "C:\pagefile.sys" -Type MultiString -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $memPath -Name "PagefileOnOsVolume" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "ClearPageFileAtShutdown" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "DisablePagingExecutive" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          Write-Host "5. Adim: Hazirda Bekletme (Hibernation) kapatiliyor..."
+          Write-Host "7. Adim: Hazirda Bekletme (Hibernation) kapatiliyor..."
           powercfg -h off
           vssadmin delete shadows /all /quiet
           
