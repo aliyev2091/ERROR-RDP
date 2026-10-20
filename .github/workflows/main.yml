@@ -171,7 +171,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. SANAL BELLEK (PAGEFILE) KÖKTEN SİLME VE GİZLİLİK (v108)
+      # 7. SANAL BELLEK (PAGEFILE) KÖKTEN SİLME (v109 - İZİN ZORLAMA)
       # ==========================================
       - name: Sanal Bellek (Pagefile) Kokten Silme ve Gizlilik
         run: |
@@ -185,6 +185,51 @@ jobs:
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessCamera" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessMicrophone" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           
+          Write-Host "Pagefile silme islemi icin ozel izin (SeCreatePagefilePrivilege) etkinlestiriliyor..."
+          # PowerShell ile ozel ayricalik (Privilege) etkinlestirme
+          $adjustTokenPrivileges = @"
+          using System;
+          using System.Runtime.InteropServices;
+          public class TokenManipulator {
+              [DllImport("advapi32.dll", ExactSpelling = true, SetLastError = true)]
+              internal static extern bool AdjustTokenPrivileges(IntPtr htok, bool disall, ref TokPriv1Luid newst, int len, IntPtr prev, IntPtr relen);
+              [DllImport("kernel32.dll", ExactSpelling = true)]
+              internal static extern IntPtr GetCurrentProcess();
+              [DllImport("advapi32.dll", ExactSpelling = true, SetLastError = true)]
+              internal static extern bool OpenProcessToken(IntPtr h, int acc, ref IntPtr phtok);
+              [DllImport("advapi32.dll", SetLastError = true)]
+              internal static extern bool LookupPrivilegeValue(string host, string name, ref long pluid);
+              [StructLayout(LayoutKind.Sequential, Pack = 1)]
+              internal struct TokPriv1Luid {
+                  public int Count;
+                  public long Luid;
+                  public int Attr;
+              }
+              internal const int SE_PRIVILEGE_ENABLED = 0x00000002;
+              internal const int TOKEN_QUERY = 0x00000008;
+              internal const int TOKEN_ADJUST_PRIVILEGES = 0x00000020;
+              public static bool AddPrivilege(string privilege) {
+                  try {
+                      bool retVal;
+                      TokPriv1Luid tp;
+                      IntPtr hproc = GetCurrentProcess();
+                      IntPtr htok = IntPtr.Zero;
+                      retVal = OpenProcessToken(hproc, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, ref htok);
+                      tp.Count = 1;
+                      tp.Luid = 0;
+                      tp.Attr = SE_PRIVILEGE_ENABLED;
+                      retVal = LookupPrivilegeValue(null, privilege, ref tp.Luid);
+                      retVal = AdjustTokenPrivileges(htok, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+                      return retVal;
+                  } catch (Exception ex) {
+                      throw ex;
+                  }
+              }
+          }
+          "@
+          Add-Type -TypeDefinition $adjustTokenPrivileges -ErrorAction SilentlyContinue
+          [TokenManipulator]::AddPrivilege("SeCreatePagefilePrivilege")
+
           Write-Host "1. Adim: Cokme Dokumu (Crash Dump) kapatiliyor..."
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name "CrashDumpEnabled" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
 
