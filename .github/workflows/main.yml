@@ -10,7 +10,7 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. SİSTEM ÖZETİ VE DİSK TESPİTİ
+      # 1. SİSTEM ÖZETİ VE KESİN DİSK TESPİTİ
       # ==========================================
       - name: Sistem Özeti
         run: |
@@ -28,30 +28,65 @@ jobs:
           Write-Host "[+] RAM Miktari     : $ram GB"
           
           Write-Host "-----------------------------------------------------------------"
+          
+          # KESİN DİSK TİPİ TESPİTİ (5 AŞAMALI DEDEKTİF - YALAN YOK)
           $kesinTip = "Bilinmiyor"
+          $detay = ""
+          
+          # Aşama 1: Standart Modern API
           try {
               $pd = Get-PhysicalDisk -ErrorAction Stop | Select-Object -First 1
-              if ($pd.MediaType -eq "SSD") { $kesinTip = "SSD" }
-              elseif ($pd.MediaType -eq "HDD") { $kesinTip = "HDD" }
-              elseif ($pd.MediaType -eq "Unspecified") {
-                  try {
-                      $reliability = $pd | Get-StorageReliabilityCounter -ErrorAction Stop
-                      if ($reliability.SeekPenalty -eq 0) { $kesinTip = "SSD (Seek Penalty'den Tespit Edildi)" }
-                      elseif ($reliability.SeekPenalty -gt 0) { $kesinTip = "HDD (Seek Penalty'den Tespit Edildi)" }
-                  } catch {
-                      if ($pd.FriendlyName -match "NVMe|SSD|Solid State") { $kesinTip = "SSD (Model Adindan Tespit Edildi)" }
-                      else { $kesinTip = "Sanallaştırılmış Disk (Muhtemelen SSD)" }
-                  }
-              }
-          } catch {
-              $wmiDisk = Get-WmiObject Win32_DiskDrive -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($wmiDisk) {
-                  if ($wmiDisk.Model -match "NVMe|SSD|Solid State") { $kesinTip = "SSD (WMI Modelden)" }
-                  elseif ($wmiDisk.MediaType -match "Fixed hard disk") { $kesinTip = "HDD (WMI Medya Tipi)" }
+              if ($pd.MediaType -eq "SSD") { $kesinTip = "SSD"; $detay = "Modern API (Get-PhysicalDisk)" }
+              elseif ($pd.MediaType -eq "HDD") { $kesinTip = "HDD"; $detay = "Modern API (Get-PhysicalDisk)" }
+              elseif ($pd.MediaType -eq "SCM") { $kesinTip = "SCM (Depolama Sinifi Bellek)"; $detay = "Modern API (Get-PhysicalDisk)" }
+          } catch {}
+          
+          # Aşama 2: Derin WMI Katmanı
+          if ($kesinTip -eq "Bilinmiyor") {
+              try {
+                  $msftPd = Get-CimInstance -Namespace root/Microsoft/Windows/Storage -ClassName MSFT_PhysicalDisk -ErrorAction Stop | Select-Object -First 1
+                  if ($msftPd.MediaType -eq 4) { $kesinTip = "SSD"; $detay = "WMI Katmani (MSFT_PhysicalDisk)" }
+                  elseif ($msftPd.MediaType -eq 3) { $kesinTip = "HDD"; $detay = "WMI Katmani (MSFT_PhysicalDisk)" }
+              } catch {}
+          }
+          
+          # Aşama 3: Diskin Dönüş Hızı (Rotation Rate) - En Kesin Yöntem
+          if ($kesinTip -eq "Bilinmiyor") {
+              try {
+                  $rot = Get-CimInstance -Namespace root/Microsoft/Windows/Storage -ClassName MSFT_PhysicalDisk -ErrorAction Stop | Select-Object -First 1 -ExpandProperty NominalMediaRotationRate
+                  if ($rot -eq 1 -or $rot -eq 0) { $kesinTip = "SSD"; $detay = "Donus Hizi (0/1 RPM)" }
+                  elseif ($rot -gt 1) { $kesinTip = "HDD"; $detay = "Donus Hizi ($rot RPM)" }
+              } catch {}
+          }
+          
+          # Aşama 4: Eski Usul Model ve Medya Tipi Kontrolü
+          if ($kesinTip -eq "Bilinmiyor") {
+              try {
+                  $wmiDisk = Get-WmiObject Win32_DiskDrive -ErrorAction Stop | Select-Object -First 1
+                  if ($wmiDisk.Model -match "NVMe|SSD|Solid State") { $kesinTip = "SSD"; $detay = "Model Adi (Win32_DiskDrive)" }
+                  elseif ($wmiDisk.Model -match "HDD|Mechanical|Hard Drive") { $kesinTip = "HDD"; $detay = "Model Adi (Win32_DiskDrive)" }
+                  elseif ($wmiDisk.MediaType -match "Fixed hard disk") { $kesinTip = "HDD (Muhtemelen)"; $detay = "Medya Tipi (Win32_DiskDrive)" }
+              } catch {}
+          }
+          
+          # Aşama 5: Gerçekten Bulunamadıysa Dürüst Ol (Yalan Söyleme)
+          if ($kesinTip -eq "Bilinmiyor") {
+              $kesinTip = "Gizlenmis / Sanallastirilmis"
+              $detay = "Hypervisor fiziksel diski gizliyor"
+          }
+          
+          Write-Host "[+] Kesin Disk Tipi : $kesinTip"
+          Write-Host "    -> Tespit Yontemi: $detay"
+          
+          # Fiziksel Disk Detayları
+          Write-Host "[+] Disk Detaylari  :"
+          $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object FriendlyName, MediaType, BusType, @{Name="SizeGB";Expression={[math]::Round($_.Size/1GB, 2)}}
+          if ($disks) {
+              foreach ($disk in $disks) {
+                  $media = if (-not $disk.MediaType) { "Bilinmiyor" } else { $disk.MediaType }
+                  Write-Host "    -> $($disk.FriendlyName) | API Tipi: $media | Baglanti: $($disk.BusType) | Boyut: $($disk.SizeGB) GB"
               }
           }
-          if ($kesinTip -eq "Bilinmiyor") { $kesinTip = "SSD (GitHub Varsayilani)" }
-          Write-Host "[+] Kesin Disk Tipi : $kesinTip"
           
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
           Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
@@ -206,7 +241,6 @@ jobs:
       # ==========================================
       - name: Gizlilik Duvarı (Sadece Telemetri)
         run: |
-          # Kamera ve Mikrofon kısıtlamaları KALDIRILDI. Sadece veri toplama (Telemetri) kapatılıyor.
           $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
           if (-not (Test-Path $telPath)) { New-Item -Path $telPath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $telPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
