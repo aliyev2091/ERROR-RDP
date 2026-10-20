@@ -10,19 +10,46 @@ jobs:
     
     steps:
       # ==========================================
-      # 1. DETAYLI SİSTEM BİLGİLERİ
+      # 1. DETAYLI SİSTEM BİLGİLERİ (EKSİKLER TAMAMLANDI)
       # ==========================================
       - name: Sistem Özeti
         run: |
           Write-Host "================================================================="
           Write-Host "                 DETAYLI SISTEM BILGILERI                        "
           Write-Host "================================================================="
+          
+          # 1. İşletim Sistemi
           $os = Get-CimInstance -ClassName Win32_OperatingSystem
           Write-Host "[+] Isletim Sistemi : $($os.Caption) (Build: $($os.BuildNumber))"
+          
+          # 2. İşlemci ve Çekirdek
           $cpu = Get-CimInstance -ClassName Win32_Processor
           Write-Host "[+] Islemci (CPU)   : $($cpu.Name)"
+          Write-Host "    -> Cekirdek      : $($cpu.NumberOfCores) Fiziksel / $($cpu.NumberOfLogicalProcessors) Mantiksal"
+          
+          # 3. RAM
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
+          
+          # 4. Fiziksel Disk ve Disk Tipi (SSD/HDD)
+          Write-Host "-----------------------------------------------------------------"
+          Write-Host "[+] Fiziksel Diskler:"
+          $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object FriendlyName, MediaType, BusType, @{Name="SizeGB";Expression={[math]::Round($_.Size/1GB, 2)}}
+          if ($disks) {
+              foreach ($disk in $disks) {
+                  $media = if (-not $disk.MediaType) { "Bilinmiyor" } else { $disk.MediaType }
+                  Write-Host "    -> $($disk.FriendlyName) | Tip: $media | Baglanti: $($disk.BusType) | Boyut: $($disk.SizeGB) GB"
+              }
+          } else {
+              Write-Host "    -> Fiziksel disk bilgisi alinamadi."
+          }
+          
+          # 5. C: Sürücüsü Detayları
+          $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
+          $freeGB = [math]::Round($diskC.FreeSpace / 1GB, 2)
+          $totalGB = [math]::Round($diskC.Size / 1GB, 2)
+          Write-Host "-----------------------------------------------------------------"
+          Write-Host "[+] C: Surucusu     : $freeGB GB Bos / $totalGB GB Toplam"
           Write-Host "================================================================="
           exit 0
 
