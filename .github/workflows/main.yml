@@ -171,7 +171,7 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. SANAL BELLEK (PAGEFILE) KÖKTEN SİLME VE GİZLİLİK
+      # 7. SANAL BELLEK (PAGEFILE) KÖKTEN SİLME VE GİZLİLİK (v108)
       # ==========================================
       - name: Sanal Bellek (Pagefile) Kokten Silme ve Gizlilik
         run: |
@@ -206,11 +206,8 @@ jobs:
           $memPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
           Set-ItemProperty -Path $memPath -Name "PagingFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $memPath -Name "ExistingPageFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
-          # Pagefile'in isletim sistemi biriminde olusturulmasini engelle
           Set-ItemProperty -Path $memPath -Name "PagefileOnOsVolume" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-          # Kapanista pagefile'i temizle (temiz kalmasini saglar)
           Set-ItemProperty -Path $memPath -Name "ClearPageFileAtShutdown" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
-          # Cekirdek sayfalamayi devre disi birak (ekstra hiz)
           Set-ItemProperty -Path $memPath -Name "DisablePagingExecutive" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
           
           Write-Host "5. Adim: Hazirda Bekletme (Hibernation) kapatiliyor..."
