@@ -6,8 +6,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 3600
-
+    timeout-minutes: 3600 # 60 saat
+    
     steps:
       # ==========================================
       # 1. DETAYLI SİSTEM BİLGİLERİ
@@ -21,11 +21,8 @@ jobs:
           Write-Host "[+] Isletim Sistemi : $($os.Caption) (Build: $($os.BuildNumber))"
           $cpu = Get-CimInstance -ClassName Win32_Processor
           Write-Host "[+] Islemci (CPU)   : $($cpu.Name)"
-          Write-Host "    -> Cekirdek      : $($cpu.NumberOfCores) Fiziksel / $($cpu.NumberOfLogicalProcessors) Mantiksal"
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
-          $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
-          Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
           Write-Host "================================================================="
           exit 0
 
@@ -44,38 +41,34 @@ jobs:
           Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
           exit 0
 
-      - name: Tailscale'i Baslat
+      - name: Tailscale'i Başlat
         uses: tailscale/github-action@v3
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
-      - name: Kullanici Olustur, Full Admin Yap ve RDP Ac
+      - name: Kullanıcı Oluştur, Full Admin Yap ve RDP'yi Etkinleştir
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           $Password = ConvertTo-SecureString -AsPlainText "${{ secrets.ERROR_4004_PASSWORD }}" -Force
           if (-not (Get-LocalUser -Name "ERROR-4004" -ErrorAction SilentlyContinue)) {
             New-LocalUser -Name "ERROR-4004" -Password $Password -PasswordNeverExpires -AccountNeverExpires
-          } else { 
-            Set-LocalUser -Name "ERROR-4004" -Password $Password 
-          }
+          } else { Set-LocalUser -Name "ERROR-4004" -Password $Password }
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
           exit 0
 
       # ==========================================
-      # 3. TEMEL PERFORMANS VE SERVİS KAPATMA
+      # 3. SADECE SERVİSLERİ KAPAT (GÜÇ PLANI SİLİNDİ)
       # ==========================================
-      - name: Servisleri Kapat
+      - name: Gereksiz Servisleri Kapat
         run: |
-          Write-Host "Gereksiz servisler kapatiliyor..."
-          $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc", "docker")
+          Write-Host "Sistemi sömüren gereksiz servisler ve Docker kapatiliyor..."
+          $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "MapsBroker", "lfsvc", "docker")
           foreach ($svc in $services) { 
-            if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
-              Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-              Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue 
-            }
+            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue 
           }
           exit 0
 
@@ -96,9 +89,9 @@ jobs:
           exit 0
 
       # ==========================================
-      # 5. KARANLIK MOD VE SİYAH DUVAR KAĞIDI
+      # 5. KARANLIK MOD VE YEREL DÜZ SİYAH DUVAR KAĞIDI
       # ==========================================
-      - name: Karanlik Mod ve Siyah Duvar Kagidi
+      - name: Karanlik Mod ve Duz Siyah Duvar Kagidi Zorlayici
         run: |
           Write-Host "Duz siyah duvar kagidi olusturuluyor..."
           $wallpaperPath = "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg"
@@ -116,21 +109,25 @@ jobs:
           $darkModeScript = @"
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg"
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "10"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper" -Value "0"
+          
+          `$code = @'
+          [DllImport("user32.dll", CharSet = CharSet.Auto)]
+          public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+          '@
+          `$type = Add-Type -MemberDefinition `$code -Name "Win32" -Namespace Win32Functions -PassThru
+          `$type::SystemParametersInfo(20, 0, "$wallpaperPath", 3)
+          
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
           "@
           Set-Content -Path "C:\darkmode.ps1" -Value $darkModeScript
           
-          Write-Host "Karanlik mod icin Zamanlanmis Gorev olusturuluyor..."
-          $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File C:\darkmode.ps1"
-          $trigger = New-ScheduledTaskTrigger -AtLogOn
-          $principal = New-ScheduledTaskPrincipal -UserId "ERROR-4004" -LogonType Interactive
+          $runOncePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
+          if (-not (Test-Path $runOncePath)) { New-Item -Path $runOncePath -Force -ErrorAction SilentlyContinue | Out-Null }
+          Set-ItemProperty -Path $runOncePath -Name "ForceDarkMode" -Value "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\darkmode.ps1" -Force
           
-          Register-ScheduledTask -TaskName "ForceDarkMode" -Action $action -Trigger $trigger -Principal $principal -Force -ErrorAction SilentlyContinue
-          
-          # Su anki runner kullanicisi icin de hemen uygula
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath" -ErrorAction SilentlyContinue
@@ -141,14 +138,14 @@ jobs:
       # 6. MASAÜSTÜNE SADECE CHROME EKLE
       # ==========================================
       - name: Masaustune Sadece Chrome Ekle
-        shell: powershell
         run: |
-          Write-Host "Chrome kisayolu olusturuluyor..."
           $chromePath = ""
-          if (Test-Path "C:\Program Files\Google\Chrome\Application\chrome.exe") { 
-              $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe" 
-          } elseif (Test-Path "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe") { 
-              $chromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" 
+          try {
+              $appPath = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction Stop
+              $chromePath = $appPath."(default)"
+          } catch {
+              if (Test-Path "C:\Program Files\Google\Chrome\Application\chrome.exe") { $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe" }
+              elseif (Test-Path "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe") { $chromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" }
           }
 
           if ($chromePath -ne "") {
@@ -157,7 +154,6 @@ jobs:
               $Shortcut = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Google Chrome.lnk")
               $Shortcut.TargetPath = $chromePath
               $Shortcut.Save()
-              
               New-Item -ItemType Directory -Force -Path "C:\Users\Public\Desktop" | Out-Null
               $Shortcut2 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Google Chrome.lnk")
               $Shortcut2.TargetPath = $chromePath
@@ -167,26 +163,27 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. GÜVENLİK, GİZLİLİK (KAMERA/MİKROFON) KAPATMA
+      # 7. GÜVENLİK, KAMERA/MİKROFON KÖKTEN KAPATMA (PAGEFILE SİLİNDİ)
       # ==========================================
       - name: Guvenlik ve Gizlilik Ayarlari
         run: |
-          Write-Host "Windows Telemetri kapatiliyor..."
           $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
           if (-not (Test-Path $telPath)) { New-Item -Path $telPath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $telPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          Write-Host "Kamera ve Mikrofon izinleri kapatiliyor..."
           $privacyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy"
           if (-not (Test-Path $privacyPath)) { New-Item -Path $privacyPath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessCamera" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessMicrophone" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
+          
+          powercfg -h off
+          vssadmin delete shadows /all /quiet
           exit 0
 
-      - name: Baglanti Bilgilerini Goster
+      - name: Bağlantı Bilgilerini Göster
         run: |
           Write-Host "===================================="
-          Write-Host "     ERROR-4004 HIZLI TEMİZLİK      "
+          Write-Host "  ERROR-4004 ULTIMATE PERFORMANS    "
           Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
@@ -195,8 +192,8 @@ jobs:
           Write-Host "===================================="
           Write-Host "Sistem hazir! Lutfen RDP ile baglanin."
           exit 0
-
-      - name: Sistemi Acik Tut
+          
+      - name: Sistemi 60 Saat Boyunca Açık Tut
         run: |
           Write-Host "Islem tamam. 60 saat uyku basliyor..."
-          Start-Sleep -Seconds 216000
+          Start-Sleep -Seconds 216000 
