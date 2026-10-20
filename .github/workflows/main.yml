@@ -44,7 +44,7 @@ jobs:
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
 
-      - name: Servisleri Kapat ve Ultimate Guc Plani
+      - name: Servisleri Kapat ve Ultimate Guc Plani Zorla
         run: |
           # 1. Gereksiz servisleri kapat (Hata kontrolü ile)
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "wuauserv", "MapsBroker", "lfsvc", "docker")
@@ -55,7 +55,7 @@ jobs:
             }
           }
           
-          Write-Host "Ultimate Performance plani zorla aktif ediliyor..."
+          Write-Host "Ultimate Performance plani kokunden zorlaniyor..."
           
           # 2. Gizli planı görünür yap ve oluştur
           cmd.exe /c "reg add `"HKLM\System\CurrentControlSet\Control\Power`" /v PlatformAoAcOverride /t REG_DWORD /d 0 /f" > $null 2>&1
@@ -68,7 +68,7 @@ jobs:
               Set-ItemProperty -Path $regPath -Name "ActivePowerScheme" -Value "e9a42b02-d5df-448d-aa00-03f14749eb61" -Force -ErrorAction SilentlyContinue
           }
           
-          # 4. Grup Ilkesi (GPO) ile kullanici degistiremesin
+          # 4. Grup Ilkesi (GPO) ile kullanici degistiremesin (En kritik ayar)
           $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings"
           if (-not (Test-Path $policyPath)) { New-Item -Path $policyPath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $policyPath -Name "ActivePowerScheme" -Value "e9a42b02-d5df-448d-aa00-03f14749eb61" -Force -ErrorAction SilentlyContinue
