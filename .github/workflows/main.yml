@@ -6,17 +6,11 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 3600 # 60 saat
+    timeout-minutes: 3600
     
     steps:
-      # ==========================================
-      # 1. SİSTEM ÖZETİ VE KESİN DİSK TESPİTİ
-      # ==========================================
       - name: Sistem Özeti
         run: |
-          Write-Host "================================================================="
-          Write-Host "                 DETAYLI SISTEM BILGILERI                        "
-          Write-Host "================================================================="
           $os = Get-CimInstance -ClassName Win32_OperatingSystem
           Write-Host "[+] Isletim Sistemi : $($os.Caption) (Build: $($os.BuildNumber))"
           
@@ -27,30 +21,24 @@ jobs:
           $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
           Write-Host "[+] RAM Miktari     : $ram GB"
           
-          Write-Host "-----------------------------------------------------------------"
-          
-          # KESİN DİSK TİPİ TESPİTİ (5 AŞAMALI DEDEKTİF - YALAN YOK)
           $kesinTip = "Bilinmiyor"
           $detay = ""
           
-          # Aşama 1: Standart Modern API
           try {
               $pd = Get-PhysicalDisk -ErrorAction Stop | Select-Object -First 1
-              if ($pd.MediaType -eq "SSD") { $kesinTip = "SSD"; $detay = "Modern API (Get-PhysicalDisk)" }
-              elseif ($pd.MediaType -eq "HDD") { $kesinTip = "HDD"; $detay = "Modern API (Get-PhysicalDisk)" }
-              elseif ($pd.MediaType -eq "SCM") { $kesinTip = "SCM (Depolama Sinifi Bellek)"; $detay = "Modern API (Get-PhysicalDisk)" }
+              if ($pd.MediaType -eq "SSD") { $kesinTip = "SSD"; $detay = "Modern API" }
+              elseif ($pd.MediaType -eq "HDD") { $kesinTip = "HDD"; $detay = "Modern API" }
+              elseif ($pd.MediaType -eq "SCM") { $kesinTip = "SCM"; $detay = "Modern API" }
           } catch {}
           
-          # Aşama 2: Derin WMI Katmanı
           if ($kesinTip -eq "Bilinmiyor") {
               try {
                   $msftPd = Get-CimInstance -Namespace root/Microsoft/Windows/Storage -ClassName MSFT_PhysicalDisk -ErrorAction Stop | Select-Object -First 1
-                  if ($msftPd.MediaType -eq 4) { $kesinTip = "SSD"; $detay = "WMI Katmani (MSFT_PhysicalDisk)" }
-                  elseif ($msftPd.MediaType -eq 3) { $kesinTip = "HDD"; $detay = "WMI Katmani (MSFT_PhysicalDisk)" }
+                  if ($msftPd.MediaType -eq 4) { $kesinTip = "SSD"; $detay = "WMI Katmani" }
+                  elseif ($msftPd.MediaType -eq 3) { $kesinTip = "HDD"; $detay = "WMI Katmani" }
               } catch {}
           }
           
-          # Aşama 3: Diskin Dönüş Hızı (Rotation Rate) - En Kesin Yöntem
           if ($kesinTip -eq "Bilinmiyor") {
               try {
                   $rot = Get-CimInstance -Namespace root/Microsoft/Windows/Storage -ClassName MSFT_PhysicalDisk -ErrorAction Stop | Select-Object -First 1 -ExpandProperty NominalMediaRotationRate
@@ -59,46 +47,28 @@ jobs:
               } catch {}
           }
           
-          # Aşama 4: Eski Usul Model ve Medya Tipi Kontrolü
           if ($kesinTip -eq "Bilinmiyor") {
               try {
                   $wmiDisk = Get-WmiObject Win32_DiskDrive -ErrorAction Stop | Select-Object -First 1
-                  if ($wmiDisk.Model -match "NVMe|SSD|Solid State") { $kesinTip = "SSD"; $detay = "Model Adi (Win32_DiskDrive)" }
-                  elseif ($wmiDisk.Model -match "HDD|Mechanical|Hard Drive") { $kesinTip = "HDD"; $detay = "Model Adi (Win32_DiskDrive)" }
-                  elseif ($wmiDisk.MediaType -match "Fixed hard disk") { $kesinTip = "HDD (Muhtemelen)"; $detay = "Medya Tipi (Win32_DiskDrive)" }
+                  if ($wmiDisk.Model -match "NVMe|SSD|Solid State") { $kesinTip = "SSD"; $detay = "Model Adi" }
+                  elseif ($wmiDisk.Model -match "HDD|Mechanical|Hard Drive") { $kesinTip = "HDD"; $detay = "Model Adi" }
+                  elseif ($wmiDisk.MediaType -match "Fixed hard disk") { $kesinTip = "HDD (Muhtemelen)"; $detay = "Medya Tipi" }
               } catch {}
           }
           
-          # Aşama 5: Gerçekten Bulunamadıysa Dürüst Ol (Yalan Söyleme)
           if ($kesinTip -eq "Bilinmiyor") {
               $kesinTip = "Gizlenmis / Sanallastirilmis"
-              $detay = "Hypervisor fiziksel diski gizliyor"
+              $detay = "Hypervisor engeli"
           }
           
-          Write-Host "[+] Kesin Disk Tipi : $kesinTip"
-          Write-Host "    -> Tespit Yontemi: $detay"
-          
-          # Fiziksel Disk Detayları
-          Write-Host "[+] Disk Detaylari  :"
-          $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object FriendlyName, MediaType, BusType, @{Name="SizeGB";Expression={[math]::Round($_.Size/1GB, 2)}}
-          if ($disks) {
-              foreach ($disk in $disks) {
-                  $media = if (-not $disk.MediaType) { "Bilinmiyor" } else { $disk.MediaType }
-                  Write-Host "    -> $($disk.FriendlyName) | API Tipi: $media | Baglanti: $($disk.BusType) | Boyut: $($disk.SizeGB) GB"
-              }
-          }
+          Write-Host "[+] Kesin Disk Tipi : $kesinTip ($detay)"
           
           $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
           Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
-          Write-Host "================================================================="
           exit 0
 
-      # ==========================================
-      # 2. EDGE SÖKÜMÜ
-      # ==========================================
       - name: Edge Sökümü
         run: |
-          Write-Host "Microsoft Edge ve tum kalintilari siliniyor..."
           Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Program Files\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\Default\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
@@ -113,10 +83,7 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
-      # ==========================================
-      # 3. ADMIN VE RDP KURULUMU (İZİNLER AÇIK)
-      # ==========================================
-      - name: Admin ve RDP Kurulumu
+      - name: Admin ve RDP
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
@@ -127,18 +94,12 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004" -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
-          
-          # RDP Pano ve Disk Paylaşımı (Redirection) İzinlerini Garantiye Al (0 = İzin Ver)
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableClip" -Value 0 -Type DWord -Force
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableCdm" -Value 0 -Type DWord -Force
           exit 0
 
-      # ==========================================
-      # 4. GEREKSİZ SERVİSLERİ KAPAT
-      # ==========================================
       - name: Servis Optimizasyonu
         run: |
-          Write-Host "Sistemi sömüren gereksiz servisler ve Docker kapatiliyor..."
           $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "MapsBroker", "lfsvc", "docker")
           foreach ($svc in $services) { 
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
@@ -146,12 +107,8 @@ jobs:
           }
           exit 0
 
-      # ==========================================
-      # 5. AĞ OPTİMİZASYONU
-      # ==========================================
       - name: Ağ Optimizasyonu
         run: |
-          Write-Host "RDP Gecikme ve Ag Optimizasyonlari yapiliyor..."
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fEnableRemoteFX" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
@@ -162,14 +119,9 @@ jobs:
           ipconfig /flushdns
           exit 0
 
-      # ==========================================
-      # 6. KARANLIK MOD VE DUVAR KAĞIDI
-      # ==========================================
       - name: Karanlık Tema
         run: |
-          Write-Host "Duz siyah duvar kagidi olusturuluyor..."
           $wallpaperPath = "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg"
-          
           try {
               Add-Type -AssemblyName System.Drawing
               $bmp = New-Object System.Drawing.Bitmap 1920, 1080
@@ -186,14 +138,12 @@ jobs:
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "10"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper" -Value "0"
-          
           `$code = @'
           [DllImport("user32.dll", CharSet = CharSet.Auto)]
           public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
           '@
           `$type = Add-Type -MemberDefinition `$code -Name "Win32" -Namespace Win32Functions -PassThru
           `$type::SystemParametersInfo(20, 0, "$wallpaperPath", 3)
-          
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
           "@
           Set-Content -Path "C:\darkmode.ps1" -Value $darkModeScript
@@ -208,9 +158,6 @@ jobs:
           RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
           exit 0
 
-      # ==========================================
-      # 7. MASAÜSTÜNE SADECE CHROME EKLE
-      # ==========================================
       - name: Chrome Kısayolu
         run: |
           $chromePath = ""
@@ -236,33 +183,23 @@ jobs:
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           exit 0
 
-      # ==========================================
-      # 8. SADECE GEREKSİZ TELEMETRİYİ KAPAT
-      # ==========================================
-      - name: Gizlilik Duvarı (Sadece Telemetri)
+      - name: Gizlilik
         run: |
           $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
           if (-not (Test-Path $telPath)) { New-Item -Path $telPath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $telPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-          
           powercfg -h off
           vssadmin delete shadows /all /quiet
           exit 0
 
       - name: Giriş Bilgileri
         run: |
-          Write-Host "===================================="
-          Write-Host "  ERROR-4004 ULTIMATE PERFORMANS    "
-          Write-Host "===================================="
           Write-Host "Tailscale IP:"
           tailscale ip -4
           Write-Host "Kullanici Adi : ERROR-4004"
           Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
-          Write-Host "===================================="
-          Write-Host "Sistem hazir! Lutfen RDP ile baglanin."
           exit 0
           
       - name: 60 Saat Bekleme
         run: |
-          Write-Host "Islem tamam. 60 saat uyku basliyor..."
           Start-Sleep -Seconds 216000 
