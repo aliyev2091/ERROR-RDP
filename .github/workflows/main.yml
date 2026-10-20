@@ -105,58 +105,41 @@ jobs:
           Write-Host "Duz siyah duvar kagidi olusturuluyor..."
           $wallpaperPath = "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg"
           
-          # System.Drawing kütüphanesi ile internetten indirmeden, yerel olarak düz siyah bir resim oluşturuyoruz
           try {
               Add-Type -AssemblyName System.Drawing
               $bmp = New-Object System.Drawing.Bitmap 1920, 1080
               $graphics = [System.Drawing.Graphics]::FromImage($bmp)
-              # Göz yormayan çok koyu bir antrasit/siyah ton (R:25, G:25, B:25)
               $graphics.Clear([System.Drawing.Color]::FromArgb(25, 25, 25))
               $bmp.Save($wallpaperPath, [System.Drawing.Imaging.ImageFormat]::Jpeg)
               $graphics.Dispose()
               $bmp.Dispose()
-              Write-Host "Duz siyah arka plan basariyla olusturuldu."
-          } catch {
-              Write-Host "Duvar kagidi olusturulamadi, varsayilan siyah kullanilacak."
-          }
+          } catch {}
 
-          Write-Host "Karanlik mod ve duvar kagidi betigi hazirlaniyor..."
-          # Bu betik RDP ile baglanildiginda calisacak
           $darkModeScript = @"
-          # Karanlik Mod
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
-          
-          # Duvar Kagidi Ayarlari
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath"
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "10" # Doldur (Fill)
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "10"
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper" -Value "0"
           
-          # Windows API ile ekrani ANINDA guncelle
           `$code = @'
           [DllImport("user32.dll", CharSet = CharSet.Auto)]
           public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
           '@
           `$type = Add-Type -MemberDefinition `$code -Name "Win32" -Namespace Win32Functions -PassThru
           `$type::SystemParametersInfo(20, 0, "$wallpaperPath", 3)
-          
-          # Explorer'i yeniden baslat
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
           "@
           Set-Content -Path "C:\darkmode.ps1" -Value $darkModeScript
           
-          # Bu betigi kullanici girisine (RunOnce) ekle
           $runOncePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
           if (-not (Test-Path $runOncePath)) { New-Item -Path $runOncePath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $runOncePath -Name "ForceDarkMode" -Value "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\darkmode.ps1" -Force
           
-          # Mevcut Runner kullanicisi icin de uygula ve aninda guncelle
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath" -ErrorAction SilentlyContinue
           RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
-          
-          Write-Host "Islem tamamlandi."
           exit 0
 
       # ==========================================
@@ -188,10 +171,11 @@ jobs:
           exit 0
 
       # ==========================================
-      # 7. GÜVENLİK, KAMERA/MİKROFON KÖKTEN KAPATMA VE PAGEFILE (CIM)
+      # 7. SANAL BELLEK (PAGEFILE) KÖKTEN SİLME VE GİZLİLİK
       # ==========================================
-      - name: Guvenlik, Gizlilik ve Pagefile Ayarlari
+      - name: Sanal Bellek (Pagefile) Kokten Silme ve Gizlilik
         run: |
+          Write-Host "Gizlilik ayarlari yapiliyor..."
           $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
           if (-not (Test-Path $telPath)) { New-Item -Path $telPath -Force -ErrorAction SilentlyContinue | Out-Null }
           Set-ItemProperty -Path $telPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
@@ -201,21 +185,32 @@ jobs:
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessCamera" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $privacyPath -Name "LetAppsAccessMicrophone" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
           
-          Write-Host "Sanal bellek (Pagefile) WMI/CIM ile kokten siliniyor..."
+          Write-Host "1. Adim: Cokme Dokumu (Crash Dump) kapatiliyor (Pagefile inadi kiriliyor)..."
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name "CrashDumpEnabled" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+
+          Write-Host "2. Adim: Otomatik Pagefile yonetimi kapatiliyor (CIM)..."
           $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
           if ($cs) {
               Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile = $false} -ErrorAction SilentlyContinue
           }
+
+          Write-Host "3. Adim: Var olan Pagefile ayarlari siliniyor (CIM)..."
           $pageFiles = Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue
           if ($pageFiles) {
               foreach ($pf in $pageFiles) {
                   Remove-CimInstance -InputObject $pf -ErrorAction SilentlyContinue
               }
           }
+
+          Write-Host "4. Adim: Kayit defterinden kalintilar temizleniyor..."
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PagingFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "ExistingPageFiles" -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
           
+          Write-Host "5. Adim: Hazirda Bekletme (Hibernation) kapatiliyor..."
           powercfg -h off
           vssadmin delete shadows /all /quiet
+          
+          Write-Host "Pagefile islemi tamamlandi. Windows'un inadi kirildi!"
           exit 0
 
       - name: Bağlantı Bilgilerini Göster
