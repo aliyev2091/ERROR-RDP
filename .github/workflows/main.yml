@@ -61,40 +61,6 @@ jobs:
         Set-ItemProperty -Path $lanmanPath -Name "DisableBandwidthThrottling" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $lanmanPath -Name "DisableLargeMtu" -Value 0 -Type DWord -Force
 
-    - name: Windows Defender'ı Tamamen Kaldır (Uninstall)
-      continue-on-error: true
-      shell: pwsh
-      run: |
-        Write-Host "Windows Defender kaldırılıyor ve Tamper Protection devre dışı bırakılıyor..."
-        
-        # 1. Tamper Protection'ı kapatmayı dene (başarısız olursa devam et)
-        try { Set-MpPreference -DisableTamperProtection $true -ErrorAction Stop } catch { Write-Host "Set-MpPreference atlandı." }
-        
-        # 2. Kayıt defteri politikalarını zorla
-        $defenderPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
-        if (!(Test-Path $defenderPath)) { New-Item -Path $defenderPath -Force | Out-Null }
-        Set-ItemProperty -Path $defenderPath -Name "DisableAntiSpyware" -Value 1 -Type DWord -Force
-        Set-ItemProperty -Path $defenderPath -Name "DisableAntiVirus" -Value 1 -Type DWord -Force
-        
-        $rtpPath = "$defenderPath\Real-Time Protection"
-        if (!(Test-Path $rtpPath)) { New-Item -Path $rtpPath -Force | Out-Null }
-        Set-ItemProperty -Path $rtpPath -Name "DisableRealtimeMonitoring" -Value 1 -Type DWord -Force
-        
-        # 3. Defender servislerini durdur
-        $defServices = @("WinDefend", "WdNisSvc", "Sense", "SecurityHealthService")
-        foreach ($svc in $defServices) {
-            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
-        }
-        
-        # 4. Defender özelliğini sistemden tamamen kaldır
-        try {
-            Uninstall-WindowsFeature -Name Windows-Defender -ErrorAction Stop
-            Write-Host "Windows Defender başarıyla kaldırıldı."
-        } catch {
-            Write-Host "Windows Defender kaldırılamadı, ancak servisler devre dışı bırakıldı."
-        }
-
     - name: Gereksiz Servisleri Kapat ve Güç Planını Optimize Et
       shell: pwsh
       run: |
@@ -121,6 +87,39 @@ jobs:
       run: |
         $securePass = ConvertTo-SecureString -AsPlainText "ERROR-1234" -Force
         Set-LocalUser -Name "runneradmin" -Password $securePass
+
+    - name: Karanlık Modu ve Siyah Arka Planı Ayarla
+      shell: pwsh
+      run: |
+        # 1. KARANLIK MODU ETKİNLEŞTİR (Uygulamalar ve Sistem)
+        $themePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        if (!(Test-Path $themePath)) { New-Item -Path $themePath -Force | Out-Null }
+        Set-ItemProperty -Path $themePath -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force
+        Set-ItemProperty -Path $themePath -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
+
+        # 2. SİYAH ARKA PLAN OLUŞTUR VE UYGULA
+        Add-Type -AssemblyName System.Drawing
+        $bmp = New-Object System.Drawing.Bitmap 1920, 1080
+        $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+        $graphics.Clear([System.Drawing.Color]::Black)
+        $wallpaperPath = "C:\Windows\Web\Wallpaper\black_wallpaper.jpg"
+        $bmp.Save($wallpaperPath, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+        $graphics.Dispose()
+        $bmp.Dispose()
+
+        # Windows API ile arka planı değiştir
+        $signature = @'
+        [DllImport("user32.dll", CharSet=CharSet.Auto)]
+        public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+        '@
+        $type = Add-Type -MemberDefinition $signature -Name Win32SystemParametersInfo -Namespace Win32Functions -PassThru
+        $type::SystemParametersInfo(20, 0, $wallpaperPath, 3)
+
+        # 3. GÖREV ÇUBUĞUNU VE GEZGİNİ YENİDEN BAŞLATARAK AYARLARI UYGULA
+        Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        Start-Process explorer.exe
+        Start-Sleep -Seconds 2
 
     - name: Masaüstünü ve Görev Çubuğunu Temizle
       shell: pwsh
