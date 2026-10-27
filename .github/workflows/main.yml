@@ -2,204 +2,123 @@ name: ERROR-4004
 
 on:
   workflow_dispatch:
+    inputs:
+      keep_alive_hours:
+        description: 'Açık kalma süresi (saat)'
+        required: false
+        default: '6'
 
 jobs:
   build:
+    # Public repo ise 4 vCPU / 16 GB. Larger runner için: runs-on: [self-hosted, windows, gpu]
     runs-on: windows-latest
-    timeout-minutes: 3600
-    
+    timeout-minutes: 360
+
     steps:
-      - name: Sistem Özeti
-        run: |
-          $os = Get-CimInstance -ClassName Win32_OperatingSystem
-          Write-Host "[+] Isletim Sistemi : $($os.Caption) (Build: $($os.BuildNumber))"
-          
-          $cpu = Get-CimInstance -ClassName Win32_Processor
-          Write-Host "[+] Islemci (CPU)   : $($cpu.Name)"
-          Write-Host "    -> Cekirdek      : $($cpu.NumberOfCores) Fiziksel / $($cpu.NumberOfLogicalProcessors) Mantiksal"
-          
-          $ram = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
-          Write-Host "[+] RAM Miktari     : $ram GB"
-          
-          $kesinTip = "Bilinmiyor"
-          $detay = ""
-          
-          try {
-              $pd = Get-PhysicalDisk -ErrorAction Stop | Select-Object -First 1
-              if ($pd.MediaType -eq "SSD") { $kesinTip = "SSD"; $detay = "Modern API" }
-              elseif ($pd.MediaType -eq "HDD") { $kesinTip = "HDD"; $detay = "Modern API" }
-              elseif ($pd.MediaType -eq "SCM") { $kesinTip = "SCM"; $detay = "Modern API" }
-          } catch {}
-          
-          if ($kesinTip -eq "Bilinmiyor") {
-              try {
-                  $msftPd = Get-CimInstance -Namespace root/Microsoft/Windows/Storage -ClassName MSFT_PhysicalDisk -ErrorAction Stop | Select-Object -First 1
-                  if ($msftPd.MediaType -eq 4) { $kesinTip = "SSD"; $detay = "WMI Katmani" }
-                  elseif ($msftPd.MediaType -eq 3) { $kesinTip = "HDD"; $detay = "WMI Katmani" }
-              } catch {}
-          }
-          
-          if ($kesinTip -eq "Bilinmiyor") {
-              try {
-                  $rot = Get-CimInstance -Namespace root/Microsoft/Windows/Storage -ClassName MSFT_PhysicalDisk -ErrorAction Stop | Select-Object -First 1 -ExpandProperty NominalMediaRotationRate
-                  if ($rot -eq 1 -or $rot -eq 0) { $kesinTip = "SSD"; $detay = "Donus Hizi (0/1 RPM)" }
-                  elseif ($rot -gt 1) { $kesinTip = "HDD"; $detay = "Donus Hizi ($rot RPM)" }
-              } catch {}
-          }
-          
-          if ($kesinTip -eq "Bilinmiyor") {
-              try {
-                  $wmiDisk = Get-WmiObject Win32_DiskDrive -ErrorAction Stop | Select-Object -First 1
-                  if ($wmiDisk.Model -match "NVMe|SSD|Solid State") { $kesinTip = "SSD"; $detay = "Model Adi" }
-                  elseif ($wmiDisk.Model -match "HDD|Mechanical|Hard Drive") { $kesinTip = "HDD"; $detay = "Model Adi" }
-                  elseif ($wmiDisk.MediaType -match "Fixed hard disk") { $kesinTip = "HDD (Muhtemelen)"; $detay = "Medya Tipi" }
-              } catch {}
-          }
-          
-          if ($kesinTip -eq "Bilinmiyor") {
-              $kesinTip = "Gizlenmis / Sanallastirilmis"
-              $detay = "Hypervisor engeli"
-          }
-          
-          Write-Host "[+] Kesin Disk Tipi : $kesinTip ($detay)"
-          
-          $diskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
-          Write-Host "[+] C: Surucusu     : $([math]::Round($diskC.FreeSpace/1GB,2)) GB Bos / $([math]::Round($diskC.Size/1GB,2)) GB Toplam"
-          exit 0
+    - name: Tailscale Kur ve Bağlan
+      uses: tailscale/github-action@v2
+      with:
+        authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
+        version: latest
 
-      - name: Edge Sökümü
-        run: |
-          Remove-Item -Path "C:\Program Files (x86)\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Program Files\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\Default\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\runneradmin\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\ERROR-4004\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\*" -Recurse -Force -ErrorAction SilentlyContinue
-          exit 0
+    - name: RDP Etkinleştir ve Ağ Ayarları
+      shell: pwsh
+      run: |
+        # RDP servisini etkinleştir
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 2
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-      - name: Tailscale Ağı
-        uses: tailscale/github-action@v3
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+        # TCP gecikmesini azalt (Nagle algoritmasını devre dışı bırak)
+        $tcpParams = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces"
+        Get-ChildItem $tcpParams | ForEach-Object {
+            Set-ItemProperty -Path $_.PSPath -Name "TcpNoDelay" -Value 1 -Type DWord -Force
+            Set-ItemProperty -Path $_.PSPath -Name "TcpAckFrequency" -Value 1 -Type DWord -Force
+        }
 
-      - name: Admin ve RDP
-        run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          $Password = ConvertTo-SecureString -AsPlainText "${{ secrets.ERROR_4004_PASSWORD }}" -Force
-          if (-not (Get-LocalUser -Name "ERROR-4004" -ErrorAction SilentlyContinue)) {
-            New-LocalUser -Name "ERROR-4004" -Password $Password -PasswordNeverExpires -AccountNeverExpires
-          } else { Set-LocalUser -Name "ERROR-4004" -Password $Password }
-          Add-LocalGroupMember -Group "Administrators" -Member "ERROR-4004" -ErrorAction SilentlyContinue
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ERROR-4004" -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord -Force
-          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableClip" -Value 0 -Type DWord -Force
-          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableCdm" -Value 0 -Type DWord -Force
-          exit 0
+    - name: RDP Performans Kayıt Defteri Ayarları (60 FPS + GPU)
+      shell: pwsh
+      run: |
+        $tsPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+        if (!(Test-Path $tsPath)) { New-Item -Path $tsPath -Force | Out-Null }
 
-      - name: Servis Optimizasyonu
-        run: |
-          $services = @("SysMain", "WSearch", "Spooler", "DiagTrack", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "MapsBroker", "lfsvc", "docker")
-          foreach ($svc in $services) { 
+        # Grafik hızlandırma ve RemoteFX
+        Set-ItemProperty -Path $tsPath -Name "fEnableVirtualizedGraphics" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $tsPath -Name "bEnumerateHWBeforeSW" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $tsPath -Name "AVCHardwareEncodePreferred" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $tsPath -Name "AVC444ModePreferred" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $tsPath -Name "SelectTransport" -Value 0 -Type DWord -Force
+
+        # 60 FPS hedefi ve sıkıştırma
+        Set-ItemProperty -Path $tsPath -Name "VGOptimization_CaptureFrameRate" -Value 60 -Type DWord -Force
+        Set-ItemProperty -Path $tsPath -Name "ImageQuality" -Value 3 -Type DWord -Force
+        Set-ItemProperty -Path $tsPath -Name "MaxCompressionLevel" -Value 2 -Type DWord -Force
+
+        # DWM kare aralığı (60 FPS)
+        $wsPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations"
+        Set-ItemProperty -Path $wsPath -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
+
+        # Yapay gecikmeyi kaldır
+        $rdpTcpPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
+        Set-ItemProperty -Path $rdpTcpPath -Name "InteractiveDelay" -Value 0 -Type DWord -Force
+
+        # TermDD akış kontrolünü optimize et
+        $termddPath = "HKLM:\SYSTEM\CurrentControlSet\Services\TermDD"
+        Set-ItemProperty -Path $termddPath -Name "FlowControlDisable" -Value 0 -Type DWord -Force
+        Set-ItemProperty -Path $termddPath -Name "FlowControlDisplayBandwidth" -Value 16 -Type DWord -Force
+        Set-ItemProperty -Path $termddPath -Name "FlowControlChannelBandwidth" -Value 144 -Type DWord -Force
+
+        # Sistem yanıt verme önceliği (multimedya kısıtlamasını kaldır)
+        $mmPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
+        Set-ItemProperty -Path $mmPath -Name "SystemResponsiveness" -Value 0 -Type DWord -Force
+
+        # Ağ bant genişliği kısıtlamasını kaldır
+        $lanmanPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+        Set-ItemProperty -Path $lanmanPath -Name "DisableBandwidthThrottling" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $lanmanPath -Name "DisableLargeMtu" -Value 0 -Type DWord -Force
+
+    - name: Windows Görsel Efektleri ve Güç Planını Optimize Et
+      shell: pwsh
+      run: |
+        # Görsel efektleri "En iyi performans" için ayarla
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Type DWord -Force
+
+        # Yüksek performans güç planını etkinleştir
+        powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null
+        # Eski "Yüksek performans" GUID'i yoksa nihai performansı dene
+        if ($LASTEXITCODE -ne 0) { powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null }
+
+        # Gereksiz arka plan hizmetlerini durdur (performans için)
+        $services = @("SysMain", "WSearch", "Spooler")
+        foreach ($svc in $services) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue 
-          }
-          exit 0
+            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+        }
 
-      - name: Ağ Optimizasyonu
-        run: |
-          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SelectTransport" -Value 2
-          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "InteractiveDelay" -Value 0
-          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fEnableRemoteFX" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "EnableUDPTransport" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
-          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
-          ipconfig /flushdns
-          exit 0
+    - name: Yönetici Şifresini Ayarla
+      shell: pwsh
+      run: |
+        $securePass = ConvertTo-SecureString -AsPlainText "ERROR-1234" -Force
+        Set-LocalUser -Name "runneradmin" -Password $securePass
 
-      - name: Karanlık Tema
-        run: |
-          $wallpaperPath = "C:\Windows\Web\Wallpaper\dark_wallpaper.jpg"
-          try {
-              Add-Type -AssemblyName System.Drawing
-              $bmp = New-Object System.Drawing.Bitmap 1920, 1080
-              $graphics = [System.Drawing.Graphics]::FromImage($bmp)
-              $graphics.Clear([System.Drawing.Color]::FromArgb(25, 25, 25))
-              $bmp.Save($wallpaperPath, [System.Drawing.Imaging.ImageFormat]::Jpeg)
-              $graphics.Dispose()
-              $bmp.Dispose()
-          } catch {}
+    - name: Bağlantı Bilgilerini Göster ve Oturumu Açık Tut
+      shell: pwsh
+      run: |
+        $tsIP = (tailscale ip -4).Trim()
+        $hours = [int]"${{ github.event.inputs.keep_alive_hours }}"
+        if ($hours -le 0) { $hours = 6 }
+        $seconds = $hours * 3600
 
-          $darkModeScript = @"
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath"
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "10"
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper" -Value "0"
-          `$code = @'
-          [DllImport("user32.dll", CharSet = CharSet.Auto)]
-          public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
-          '@
-          `$type = Add-Type -MemberDefinition `$code -Name "Win32" -Namespace Win32Functions -PassThru
-          `$type::SystemParametersInfo(20, 0, "$wallpaperPath", 3)
-          Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-          "@
-          Set-Content -Path "C:\darkmode.ps1" -Value $darkModeScript
-          
-          $runOncePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
-          if (-not (Test-Path $runOncePath)) { New-Item -Path $runOncePath -Force -ErrorAction SilentlyContinue | Out-Null }
-          Set-ItemProperty -Path $runOncePath -Name "ForceDarkMode" -Value "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\darkmode.ps1" -Force
-          
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value "$wallpaperPath" -ErrorAction SilentlyContinue
-          RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
-          exit 0
+        Write-Host "=================================================="
+        Write-Host "  RDP HAZIR (ERROR-4004 - FULL PERFORMANS)"
+        Write-Host "=================================================="
+        Write-Host "  Tailscale IP : $tsIP"
+        Write-Host "  Kullanıcı Adı: runneradmin"
+        Write-Host "  Şifre        : ERROR-1234"
+        Write-Host "  Süre         : $hours saat"
+        Write-Host "=================================================="
+        Write-Host "İstemci tarafında Tailscale açık olmalıdır."
+        Write-Host "Uzak Masaüstü Bağlantısı'na yukarıdaki IP'yi girin."
 
-      - name: Chrome Kısayolu
-        run: |
-          $chromePath = ""
-          try {
-              $appPath = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction Stop
-              $chromePath = $appPath."(default)"
-          } catch {
-              if (Test-Path "C:\Program Files\Google\Chrome\Application\chrome.exe") { $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe" }
-              elseif (Test-Path "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe") { $chromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" }
-          }
-
-          if ($chromePath -ne "") {
-              $WshShell = New-Object -ComObject WScript.Shell
-              New-Item -ItemType Directory -Force -Path "C:\Users\ERROR-4004\Desktop" | Out-Null
-              $Shortcut = $WshShell.CreateShortcut("C:\Users\ERROR-4004\Desktop\Google Chrome.lnk")
-              $Shortcut.TargetPath = $chromePath
-              $Shortcut.Save()
-              New-Item -ItemType Directory -Force -Path "C:\Users\Public\Desktop" | Out-Null
-              $Shortcut2 = $WshShell.CreateShortcut("C:\Users\Public\Desktop\Google Chrome.lnk")
-              $Shortcut2.TargetPath = $chromePath
-              $Shortcut2.Save()
-          }
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-          exit 0
-
-      - name: Gizlilik
-        run: |
-          $telPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
-          if (-not (Test-Path $telPath)) { New-Item -Path $telPath -Force -ErrorAction SilentlyContinue | Out-Null }
-          Set-ItemProperty -Path $telPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-          powercfg -h off
-          vssadmin delete shadows /all /quiet
-          exit 0
-
-      - name: Giriş Bilgileri
-        run: |
-          Write-Host "Tailscale IP:"
-          tailscale ip -4
-          Write-Host "Kullanici Adi : ERROR-4004"
-          Write-Host "Parola        : (Secrets -> ERROR_4004_PASSWORD)"
-          exit 0
-          
-      - name: 60 Saat Bekleme
-        run: |
-          Start-Sleep -Seconds 216000 
+        Start-Sleep -Seconds $seconds
