@@ -33,7 +33,7 @@ jobs:
             Set-ItemProperty -Path $_.PSPath -Name "TcpAckFrequency" -Value 1 -Type DWord -Force
         }
 
-    - name: RDP Performans Kayıt Defteri Ayarları (60 FPS + GPU)
+    - name: RDP Performans Kayıt Defteri Ayarları
       shell: pwsh
       run: |
         $tsPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
@@ -96,7 +96,6 @@ jobs:
         Write-Host "  Süre         : $hours saat"
         Write-Host "=================================================="
         
-        # === PENCERE GİZLEYİCİ BEKÇİYİ BAŞLAT ===
         $hideScript = {
             Add-Type @"
             using System;
@@ -115,25 +114,20 @@ jobs:
                 if ([WinHider]::IsWindowVisible($hWnd)) {
                     $sb = New-Object System.Text.StringBuilder 256
                     [WinHider]::GetWindowText($hWnd, $sb, 256) | Out-Null
-                    # "Default" veya içinde konsol barındıran pencereleri gizle
                     if ($sb.ToString() -match "Default|Runner|console") {
-                        [WinHider]::ShowWindow($hWnd, 0) # 0 = SW_HIDE
+                        [WinHider]::ShowWindow($hWnd, 0)
                     }
                 }
                 return $true
             }
             $del = [WinHider+EnumWindowsProc]$cb
-            # Makine açık kaldığı sürece her 2 saniyede bir kontrol et
             while ($true) {
                 [WinHider]::EnumWindows($del, [IntPtr]::Zero) | Out-Null
                 Start-Sleep -Seconds 2
             }
         }
         
-        # Bekçiyi arka planda başlat
         Start-Job -ScriptBlock $hideScript | Out-Null
         Write-Host "Arka plan pencere gizleyici aktif edildi."
-        # ==========================================
-
-        # Makineyi belirtilen süre boyunca açık tut
+        
         Start-Sleep -Seconds $seconds
