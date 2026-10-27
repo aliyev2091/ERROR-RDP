@@ -114,13 +114,11 @@ jobs:
         powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null
         if ($LASTEXITCODE -ne 0) { powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null }
         
-        # 1. WINDOWS UPDATE'İ KAYIT DEFTERİNDEN TAMAMEN KAPAT
         $wuPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
         if (!(Test-Path $wuPath)) { New-Item -Path $wuPath -Force | Out-Null }
         Set-ItemProperty -Path $wuPath -Name "NoAutoUpdate" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $wuPath -Name "AUOptions" -Value 1 -Type DWord -Force
 
-        # 2. SERVİSLERİ ZORLA DURDUR
         $services = @(
             "SysMain", "WSearch", "Spooler", "wuauserv", "UsoSvc", "WaaSMedicSvc", 
             "bthserv", "lfsvc", "TabletInputService", "RemoteRegistry", "WerSvc", 
@@ -141,48 +139,34 @@ jobs:
         $securePass = ConvertTo-SecureString -AsPlainText "ERROR-1234" -Force
         Set-LocalUser -Name "runneradmin" -Password $securePass
 
-    - name: Varsayılan Tarayıcıyı Chrome Yap (Edge'i Devre Dışı Bırak)
+    - name: Varsayılan Tarayıcıyı Chrome Yap (Yönlendirme Sistemi)
       shell: pwsh
       run: |
         $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
         
-        # 1. Kayıt Defteri ayarları (Kullanıcı bazlı)
+        # 1. Kayıt Defteri ayarları
         New-Item -Path "HKCU:\Software\Classes\http\shell\open\command" -Force | Out-Null
         Set-ItemProperty -Path "HKCU:\Software\Classes\http\shell\open\command" -Name "(Default)" -Value "`"$chromePath`" -- `"%1`"" -Force
         
         New-Item -Path "HKCU:\Software\Classes\https\shell\open\command" -Force | Out-Null
         Set-ItemProperty -Path "HKCU:\Software\Classes\https\shell\open\command" -Name "(Default)" -Value "`"$chromePath`" -- `"%1`"" -Force
 
-        New-Item -Path "HKCU:\Software\Classes\.html" -Force | Out-Null
-        Set-ItemProperty -Path "HKCU:\Software\Classes\.html" -Name "(Default)" -Value "ChromeHTML" -Force
-        
-        New-Item -Path "HKCU:\Software\Classes\.htm" -Force | Out-Null
-        Set-ItemProperty -Path "HKCU:\Software\Classes\.htm" -Name "(Default)" -Value "ChromeHTML" -Force
-
         New-Item -Path "HKCU:\Software\Classes\ChromeHTML\shell\open\command" -Force | Out-Null
         Set-ItemProperty -Path "HKCU:\Software\Classes\ChromeHTML\shell\open\command" -Name "(Default)" -Value "`"$chromePath`" -- `"%1`"" -Force
 
-        # 2. EDGE'İ TAMAMEN ENGELLE (IFEO Yöntemi)
-        # Edge açılmaya çalışırsa bir hata verecek ve açılmayacak, sistem Chrome'a yönelecek.
+        # 2. EDGE YÖNLENDİRİCİ (MECBURİ ÇÖZÜM)
+        # Edge açılmaya çalışıldığında Windows'u bir cmd dosyasına yönlendiriyoruz.
+        # O cmd dosyası da arka planda sessizce Chrome'u açıyor.
+        $redirectScript = "C:\Windows\System32\EdgeRedirect.cmd"
+        $scriptContent = "@echo off`r`nstart `"`" `"$chromePath`" %*"
+        Set-Content -Path $redirectScript -Value $scriptContent -Encoding ASCII
+
+        # Registry üzerinden msedge.exe çağrıldığında bizim cmd dosyamızın çalışmasını sağla
         $edgePath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\msedge.exe"
         if (!(Test-Path $edgePath)) { New-Item -Path $edgePath -Force | Out-Null }
-        Set-ItemProperty -Path $edgePath -Name "Debugger" -Value "systray.exe" -Force
-
-        # 3. SİSTEM GENELİNDE ZORLA (DISM Yöntemi)
-        $xmlContent = @"
-        <?xml version="1.0" encoding="UTF-8"?>
-        <DefaultAssociations>
-          <Association Identifier=".htm" ProgId="ChromeHTML" ApplicationName="Google Chrome" />
-          <Association Identifier=".html" ProgId="ChromeHTML" ApplicationName="Google Chrome" />
-          <Association Identifier="http" ProgId="ChromeHTML" ApplicationName="Google Chrome" />
-          <Association Identifier="https" ProgId="ChromeHTML" ApplicationName="Google Chrome" />
-        </DefaultAssociations>
-        "@
-        $xmlPath = "C:\Windows\System32\DefaultAssociations.xml"
-        Set-Content -Path $xmlPath -Value $xmlContent -Encoding UTF8
-        Dism.exe /Online /Import-DefaultAppAssociations:$xmlPath
+        Set-ItemProperty -Path $edgePath -Name "Debugger" -Value $redirectScript -Force
         
-        Write-Host "Chrome varsayılan tarayıcı yapıldı ve Edge devre dışı bırakıldı!"
+        Write-Host "Edge, Chrome'a yönlendirildi. Chrome artık varsayılan!"
 
     - name: Karanlık Modu ve Siyah Arka Planı Ayarla
       shell: pwsh
@@ -226,7 +210,6 @@ jobs:
         $startMenuDir = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
         $shell = New-Object -ComObject WScript.Shell
 
-        # Chrome Kısayolu oluştur
         $chromeExe = "C:\Program Files\Google\Chrome\Application\chrome.exe"
         if (Test-Path $chromeExe) {
             $chromeLnk = "$startMenuDir\Google Chrome.lnk"
