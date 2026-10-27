@@ -79,6 +79,51 @@ jobs:
         $securePass = ConvertTo-SecureString -AsPlainText "ERROR-1234" -Force
         Set-LocalUser -Name "runneradmin" -Password $securePass
 
+    - name: Masaüstü ve Görev Çubuğunu Düzenle
+      shell: pwsh
+      run: |
+        # 1. Masaüstünü Temizle (Public ve Kullanıcı)
+        Remove-Item -Path "C:\Users\Public\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path "$env:USERPROFILE\Desktop\*" -Recurse -Force -ErrorAction SilentlyContinue
+        
+        # 2. Chrome'un yolunu bul
+        $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+        if (!(Test-Path $chromePath)) { $chromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" }
+        
+        # 3. Masaüstüne Sadece Chrome Kısayolu Ekle (Çöp kutusu zaten sistemdedir)
+        if (Test-Path $chromePath) {
+            $wshell = New-Object -ComObject WScript.Shell
+            $shortcut = $wshell.CreateShortcut("$env:USERPROFILE\Desktop\Google Chrome.lnk")
+            $shortcut.TargetPath = $chromePath
+            $shortcut.Save()
+        }
+
+        # 4. Görev Çubuğundaki Varsayılanları Temizle
+        $taskbarPath = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+        if (Test-Path $taskbarPath) {
+            Remove-Item -Path "$taskbarPath\*" -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        # 5. Görev Çubuğuna Sadece Dosya Gezgini ve Chrome Ekle
+        if (Test-Path $taskbarPath) {
+            # Dosya Gezgini
+            $explorerShortcut = $wshell.CreateShortcut("$taskbarPath\File Explorer.lnk")
+            $explorerShortcut.TargetPath = "C:\Windows\explorer.exe"
+            $explorerShortcut.Save()
+
+            # Chrome
+            if (Test-Path $chromePath) {
+                $chromeShortcut = $wshell.CreateShortcut("$taskbarPath\Google Chrome.lnk")
+                $chromeShortcut.TargetPath = $chromePath
+                $chromeShortcut.Save()
+            }
+        }
+
+        # 6. Görev Çubuğunu Yenile (Değişikliklerin anında görünmesi için)
+        Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+        Start-Process explorer.exe
+
     - name: Bağlantı Bilgilerini Göster ve Oturumu Açık Tut
       shell: pwsh
       run: |
