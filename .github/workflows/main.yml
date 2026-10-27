@@ -45,13 +45,10 @@ jobs:
             if ([string]::IsNullOrWhiteSpace($busType)) { $busType = "SCSI" }
             if ([string]::IsNullOrWhiteSpace($mediaType)) { $mediaType = "Unspecified" }
             
-            # Türkçe Tip Belirleme Mantığı
             $typeStr = ""
-            # Eğer NVMe ise, model adında SSD/NVMe geçiyorsa veya MediaType SSD ise kesinlikle SSD'dir.
             if ($busType -eq "NVMe" -or $name -match "NVMe|SSD" -or $mediaType -eq "SSD") {
                 $typeStr = "SSD ($busType)"
             } 
-            # Eğer SAS/SCSI ise ve içinde SSD geçmiyorsa HDD'dir
             elseif ($mediaType -eq "HDD" -or $busType -eq "SAS" -or $busType -eq "SCSI") {
                 $typeStr = "HDD ($busType)"
             } 
@@ -179,14 +176,7 @@ jobs:
         $startMenuDir = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
         $shell = New-Object -ComObject WScript.Shell
 
-        $explorerExe = "C:\Windows\explorer.exe"
-        if (Test-Path $explorerExe) {
-            $expLnk = "$startMenuDir\File Explorer.lnk"
-            $sc = $shell.CreateShortcut($expLnk)
-            $sc.TargetPath = $explorerExe
-            $sc.Save()
-        }
-
+        # Chrome Kısayolu oluştur
         $chromeExe = "C:\Program Files\Google\Chrome\Application\chrome.exe"
         if (Test-Path $chromeExe) {
             $chromeLnk = "$startMenuDir\Google Chrome.lnk"
@@ -199,13 +189,14 @@ jobs:
         if (!(Test-Path $xmlDir)) { New-Item -ItemType Directory -Path $xmlDir -Force | Out-Null }
         $xmlPath = "$xmlDir\LayoutModification.xml"
         
+        # Dosya Gezgini için "DesktopApplicationID" kullanıyoruz (Gerçek Sistem Uygulaması)
         $xmlLines = @(
           '<?xml version="1.0" encoding="utf-8"?>',
           '<LayoutModificationTemplate xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification" xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" xmlns:taskbar="http://schemas.microsoft.com/Start/2014/TaskbarLayout" Version="1">',
           '  <CustomTaskbarLayoutCollection PinListPlacement="Replace">',
           '    <defaultlayout:TaskbarLayout>',
           '      <taskbar:TaskbarPinList>',
-          '        <taskbar:DesktopApp DesktopApplicationLinkPath="%ALLUSERSPROFILE%\Microsoft\Windows\Start Menu\Programs\File Explorer.lnk" />',
+          '        <taskbar:DesktopApp DesktopApplicationID="Microsoft.Windows.Explorer" />',
           '        <taskbar:DesktopApp DesktopApplicationLinkPath="%ALLUSERSPROFILE%\Microsoft\Windows\Start Menu\Programs\Google Chrome.lnk" />',
           '      </taskbar:TaskbarPinList>',
           '    </defaultlayout:TaskbarLayout>',
