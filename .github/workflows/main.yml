@@ -79,28 +79,6 @@ jobs:
         $securePass = ConvertTo-SecureString -AsPlainText "ERROR-1234" -Force
         Set-LocalUser -Name "runneradmin" -Password $securePass
 
-    - name: Pencere Gizleme Görevini Oluştur
-      shell: pwsh
-      run: |
-        # RDP ile giriş yapıldığında çalışacak ve konsolu gizleyecek betik
-        $psScript = @'
-        Start-Sleep -Seconds 3
-        $sig = '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);'
-        $type = Add-Type -MemberDefinition $sig -Name Win32ShowWindow -Namespace Win32Functions -PassThru
-        Get-Process -Name cmd,powershell,hosted-compute-agent -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object {
-            [Win32Functions.Win32ShowWindow]::ShowWindow($_.MainWindowHandle, 0) # 0 = Gizle
-        }
-        '@
-        
-        # Betiği diske kaydet
-        $scriptPath = "C:\Windows\System32\hide-console.ps1"
-        $psScript | Out-File -FilePath $scriptPath -Encoding ASCII -Force
-        
-        # Zamanlanmış Görev (Scheduled Task) oluştur
-        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File $scriptPath"
-        $trigger = New-ScheduledTaskTrigger -AtLogOn -User "runneradmin"
-        Register-ScheduledTask -TaskName "HideConsoleOnLogon" -Action $action -Trigger $trigger -RunLevel Highest -Force | Out-Null
-
     - name: Bağlantı Bilgilerini Göster ve Oturumu Açık Tut
       shell: pwsh
       run: |
@@ -117,9 +95,45 @@ jobs:
         Write-Host "  Şifre        : ERROR-1234"
         Write-Host "  Süre         : $hours saat"
         Write-Host "=================================================="
-        Write-Host "  RDP ile bağlandığınızda siyah konsol penceresi"
-        Write-Host "  otomatik olarak gizlenecektir."
-        Write-Host "=================================================="
+        
+        # === PENCERE GİZLEYİCİ BEKÇİYİ BAŞLAT ===
+        $hideScript = {
+            Add-Type @"
+            using System;
+            using System.Runtime.InteropServices;
+            using System.Text;
+            public class WinHider {
+                [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+                public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+                [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+                [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+                [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+            }
+"@
+            $cb = {
+                param($hWnd, $lParam)
+                if ([WinHider]::IsWindowVisible($hWnd)) {
+                    $sb = New-Object System.Text.StringBuilder 256
+                    [WinHider]::GetWindowText($hWnd, $sb, 256) | Out-Null
+                    # "Default" veya içinde konsol barındıran pencereleri gizle
+                    if ($sb.ToString() -match "Default|Runner|console") {
+                        [WinHider]::ShowWindow($hWnd, 0) # 0 = SW_HIDE
+                    }
+                }
+                return $true
+            }
+            $del = [WinHider+EnumWindowsProc]$cb
+            # Makine açık kaldığı sürece her 2 saniyede bir kontrol et
+            while ($true) {
+                [WinHider]::EnumWindows($del, [IntPtr]::Zero) | Out-Null
+                Start-Sleep -Seconds 2
+            }
+        }
+        
+        # Bekçiyi arka planda başlat
+        Start-Job -ScriptBlock $hideScript | Out-Null
+        Write-Host "Arka plan pencere gizleyici aktif edildi."
+        # ==========================================
 
         # Makineyi belirtilen süre boyunca açık tut
         Start-Sleep -Seconds $seconds
