@@ -68,31 +68,20 @@ jobs:
         powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null
         if ($LASTEXITCODE -ne 0) { powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null }
         
-        # Kapatılacak Gereksiz Servisler Listesi (RDP'yi etkilemeyenler)
         $services = @(
-            "SysMain",              # Superfetch (Disk/RAM sömürür)
-            "WSearch",              # Windows Arama
-            "Spooler",              # Yazıcı Biriktiricisi
-            "wuauserv",             # Windows Update
-            "bthserv",              # Bluetooth Desteği
-            "lfsvc",                # Konum Hizmeti
-            "TabletInputService",   # Dokunmatik Klavye
-            "RemoteRegistry",       # Uzak Kayıt Defteri (Güvenlik riski)
-            "WerSvc",               # Windows Hata Raporlama
-            "DiagTrack",            # Telemetri
-            "dmwappushservice",     # Cihaz Yönetimi
-            "MapsBroker",           # Harita İndirmeleri
-            "XblAuthManager",       # Xbox Live
-            "XblGameSave",          # Xbox Live
-            "XboxNetApiSvc",        # Xbox Live
-            "WMPNetworkSvc",        # Windows Media Player Ağ Paylaşımı
-            "SNMPTRAP"              # SNMP Tuzağı
+            "SysMain", "WSearch", "Spooler", "wuauserv", "bthserv", "lfsvc", 
+            "TabletInputService", "RemoteRegistry", "WerSvc", "DiagTrack", 
+            "dmwappushservice", "MapsBroker", "XblAuthManager", "XblGameSave", 
+            "XboxNetApiSvc", "WMPNetworkSvc", "SNMPTRAP"
         )
         
         foreach ($svc in $services) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
         }
+        
+        # Service Fabric aracını durdur (Eğer arka planda çalışıyorsa)
+        Stop-Process -Name "ServiceFabricLocalClusterManager" -Force -ErrorAction SilentlyContinue
 
     - name: Yönetici Şifresini Ayarla
       shell: pwsh
@@ -103,7 +92,6 @@ jobs:
     - name: Masaüstünü ve Görev Çubuğunu Temizle
       shell: pwsh
       run: |
-        # 1. MASAÜSTÜNÜ TEMİZLE
         $desktopPaths = @("C:\Users\Public\Desktop", "C:\Users\runneradmin\Desktop")
         foreach ($path in $desktopPaths) {
             if (Test-Path $path) {
@@ -111,7 +99,6 @@ jobs:
             }
         }
 
-        # 2. KISAYOLLARI BAŞLAT MENÜSÜNE EKLE
         $startMenuDir = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
         $shell = New-Object -ComObject WScript.Shell
 
@@ -131,7 +118,6 @@ jobs:
             $sc.Save()
         }
 
-        # 3. XML DOSYASINI OLUŞTUR (Görev Çubuğu)
         $xmlDir = "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Shell"
         if (!(Test-Path $xmlDir)) { New-Item -ItemType Directory -Path $xmlDir -Force | Out-Null }
         $xmlPath = "$xmlDir\LayoutModification.xml"
@@ -151,19 +137,16 @@ jobs:
         )
         $xmlLines | Set-Content -Path $xmlPath -Encoding UTF8
 
-        # 4. GÖREV ÇUBUĞU POLİTİKASINI UYGULA
         $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer"
         if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
         Set-ItemProperty -Path $regPath -Name "StartLayoutFile" -Value $xmlPath -Type String -Force
         Set-ItemProperty -Path $regPath -Name "LockedStartLayout" -Value 1 -Type DWord -Force
         
-        # 5. MASAÜSTÜ SİMGELERİNİ OTOMATİK DİZ
         $desktopBag = "HKCU:\Software\Microsoft\Windows\Shell\Bags\1\Desktop"
         if (Test-Path $desktopBag) {
             Set-ItemProperty -Path $desktopBag -Name "FFlags" -Value 1075839525 -Type DWord -Force
         }
 
-        # 6. ÖNBELLEĞİ TEMİZLE VE EXPLORER'I YENİDEN BAŞLAT
         Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -Recurse -Force -ErrorAction SilentlyContinue
         Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 3
@@ -178,8 +161,10 @@ jobs:
         if ($hours -le 0) { $hours = 6 }
         $seconds = $hours * 3600
         
-        # Açılan gereksiz pencereleri kapat
+        # Açılan gereksiz pencereleri ve simgeleri kapat
         Stop-Process -Name "tailscale-ipn" -Force -ErrorAction SilentlyContinue
+        Stop-Process -Name "ServiceFabricLocalClusterManager" -Force -ErrorAction SilentlyContinue
+        
         $shellApp = New-Object -ComObject Shell.Application
         $shellApp.Windows() | Where-Object { $_.Name -eq 'File Explorer' -or $_.LocationName -eq 'Home' } | ForEach-Object { $_.Quit() }
         
