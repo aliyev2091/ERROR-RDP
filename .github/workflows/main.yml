@@ -14,18 +14,14 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: Sistem Donanım Bilgilerini Göster
+    - name: 1. Donanım Bilgisi
       shell: pwsh
       run: |
-        # CPU Bilgisi
         $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
         $cpuName = $cpu.Name.Trim()
         $cpuGhz = [math]::Round($cpu.MaxClockSpeed / 1000, 2)
-
-        # RAM Bilgisi
         $cs = Get-CimInstance Win32_ComputerSystem
         $ramGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 2)
-
         Write-Host "=================================================="
         Write-Host "        SİSTEM DONANIM BİLGİLERİ"
         Write-Host "=================================================="
@@ -33,40 +29,33 @@ jobs:
         Write-Host "  CPU Hızı   : $cpuGhz GHz"
         Write-Host "  RAM Miktarı: $ramGB GB"
         Write-Host "--------------------------------------------------"
-        
-        # Gelişmiş Disk Bilgisi Sorgusu
         $disks = Get-PhysicalDisk
         foreach ($disk in $disks) {
             $name = $disk.FriendlyName
             $sizeGB = [math]::Round($disk.Size / 1GB, 2)
             $mediaType = $disk.MediaType
             $busType = $disk.BusType
-            
             if ([string]::IsNullOrWhiteSpace($busType)) { $busType = "SCSI" }
             if ([string]::IsNullOrWhiteSpace($mediaType)) { $mediaType = "Unspecified" }
-            
             $typeStr = ""
             if ($busType -eq "NVMe" -or $name -match "NVMe|SSD" -or $mediaType -eq "SSD") {
                 $typeStr = "SSD ($busType)"
-            } 
-            elseif ($mediaType -eq "HDD" -or $busType -eq "SAS" -or $busType -eq "SCSI") {
+            } elseif ($mediaType -eq "HDD" -or $busType -eq "SAS" -or $busType -eq "SCSI") {
                 $typeStr = "HDD ($busType)"
-            } 
-            else {
+            } else {
                 $typeStr = "$mediaType ($busType)"
             }
-
             Write-Host "  Disk       : $name | Tip: $typeStr | Boyut: $sizeGB GB"
         }
         Write-Host "=================================================="
 
-    - name: Tailscale Kur ve Bağlan
+    - name: 2. Tailscale Bağlantısı
       uses: tailscale/github-action@v4
       with:
         authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
         version: latest
 
-    - name: RDP Etkinleştir ve Ağ Ayarları
+    - name: 3. RDP & Ağ Ayarları
       shell: pwsh
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
@@ -79,7 +68,7 @@ jobs:
             Set-ItemProperty -Path $_.PSPath -Name "TcpAckFrequency" -Value 1 -Type DWord -Force
         }
 
-    - name: RDP Performans Kayıt Defteri Ayarları
+    - name: 4. Performans Ayarları
       shell: pwsh
       run: |
         $tsPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
@@ -107,75 +96,58 @@ jobs:
         Set-ItemProperty -Path $lanmanPath -Name "DisableBandwidthThrottling" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $lanmanPath -Name "DisableLargeMtu" -Value 0 -Type DWord -Force
 
-    - name: Gereksiz Servisleri Kapat ve Güç Planını Optimize Et
+    - name: 5. Servis & Güç Optimizasyonu
       shell: pwsh
       run: |
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Type DWord -Force
         powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null
         if ($LASTEXITCODE -ne 0) { powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null }
-        
         $wuPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
         if (!(Test-Path $wuPath)) { New-Item -Path $wuPath -Force | Out-Null }
         Set-ItemProperty -Path $wuPath -Name "NoAutoUpdate" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $wuPath -Name "AUOptions" -Value 1 -Type DWord -Force
-
         $services = @(
             "SysMain", "WSearch", "Spooler", "wuauserv", "UsoSvc", "WaaSMedicSvc", 
             "bthserv", "lfsvc", "TabletInputService", "RemoteRegistry", "WerSvc", 
             "DiagTrack", "dmwappushservice", "MapsBroker", "XblAuthManager", 
             "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "SNMPTRAP"
         )
-        
         foreach ($svc in $services) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
         }
-        
         Stop-Process -Name "ServiceFabricLocalClusterManager" -Force -ErrorAction SilentlyContinue
 
-    - name: Yönetici Şifresini Ayarla
+    - name: 6. Şifre Ayarları
       shell: pwsh
       run: |
         $securePass = ConvertTo-SecureString -AsPlainText "ERROR-1234" -Force
         Set-LocalUser -Name "runneradmin" -Password $securePass
 
-    - name: Varsayılan Tarayıcıyı Chrome Yap (Yönlendirme Sistemi)
+    - name: 7. Chrome Varsayılan
       shell: pwsh
       run: |
         $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
-        
-        # 1. Kayıt Defteri ayarları
         New-Item -Path "HKCU:\Software\Classes\http\shell\open\command" -Force | Out-Null
         Set-ItemProperty -Path "HKCU:\Software\Classes\http\shell\open\command" -Name "(Default)" -Value "`"$chromePath`" -- `"%1`"" -Force
-        
         New-Item -Path "HKCU:\Software\Classes\https\shell\open\command" -Force | Out-Null
         Set-ItemProperty -Path "HKCU:\Software\Classes\https\shell\open\command" -Name "(Default)" -Value "`"$chromePath`" -- `"%1`"" -Force
-
         New-Item -Path "HKCU:\Software\Classes\ChromeHTML\shell\open\command" -Force | Out-Null
         Set-ItemProperty -Path "HKCU:\Software\Classes\ChromeHTML\shell\open\command" -Name "(Default)" -Value "`"$chromePath`" -- `"%1`"" -Force
-
-        # 2. EDGE YÖNLENDİRİCİ (MECBURİ ÇÖZÜM)
-        # Edge açılmaya çalışıldığında Windows'u bir cmd dosyasına yönlendiriyoruz.
-        # O cmd dosyası da arka planda sessizce Chrome'u açıyor.
         $redirectScript = "C:\Windows\System32\EdgeRedirect.cmd"
         $scriptContent = "@echo off`r`nstart `"`" `"$chromePath`" %*"
         Set-Content -Path $redirectScript -Value $scriptContent -Encoding ASCII
-
-        # Registry üzerinden msedge.exe çağrıldığında bizim cmd dosyamızın çalışmasını sağla
         $edgePath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\msedge.exe"
         if (!(Test-Path $edgePath)) { New-Item -Path $edgePath -Force | Out-Null }
         Set-ItemProperty -Path $edgePath -Name "Debugger" -Value $redirectScript -Force
-        
-        Write-Host "Edge, Chrome'a yönlendirildi. Chrome artık varsayılan!"
 
-    - name: Karanlık Modu ve Siyah Arka Planı Ayarla
+    - name: 8. Tema Ayarları
       shell: pwsh
       run: |
         $themePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
         if (!(Test-Path $themePath)) { New-Item -Path $themePath -Force | Out-Null }
         Set-ItemProperty -Path $themePath -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force
         Set-ItemProperty -Path $themePath -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
-
         Add-Type -AssemblyName System.Drawing
         $bmp = New-Object System.Drawing.Bitmap 1920, 1080
         $graphics = [System.Drawing.Graphics]::FromImage($bmp)
@@ -184,20 +156,18 @@ jobs:
         $bmp.Save($wallpaperPath, [System.Drawing.Imaging.ImageFormat]::Jpeg)
         $graphics.Dispose()
         $bmp.Dispose()
-
         $signature = @'
         [DllImport("user32.dll", CharSet=CharSet.Auto)]
         public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
         '@
         $type = Add-Type -MemberDefinition $signature -Name Win32SystemParametersInfo -Namespace Win32Functions -PassThru
         $type::SystemParametersInfo(20, 0, $wallpaperPath, 3)
-
         Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
         Start-Process explorer.exe
         Start-Sleep -Seconds 2
 
-    - name: Masaüstünü ve Görev Çubuğunu Temizle
+    - name: 9. Arayüz Temizliği
       shell: pwsh
       run: |
         $desktopPaths = @("C:\Users\Public\Desktop", "C:\Users\runneradmin\Desktop")
@@ -206,10 +176,8 @@ jobs:
                 Get-ChildItem -Path $path -Filter *.lnk -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "Google Chrome" } | Remove-Item -Force -ErrorAction SilentlyContinue
             }
         }
-
         $startMenuDir = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
         $shell = New-Object -ComObject WScript.Shell
-
         $chromeExe = "C:\Program Files\Google\Chrome\Application\chrome.exe"
         if (Test-Path $chromeExe) {
             $chromeLnk = "$startMenuDir\Google Chrome.lnk"
@@ -217,11 +185,9 @@ jobs:
             $sc.TargetPath = $chromeExe
             $sc.Save()
         }
-
         $xmlDir = "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Shell"
         if (!(Test-Path $xmlDir)) { New-Item -ItemType Directory -Path $xmlDir -Force | Out-Null }
         $xmlPath = "$xmlDir\LayoutModification.xml"
-        
         $xmlLines = @(
           '<?xml version="1.0" encoding="utf-8"?>',
           '<LayoutModificationTemplate xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification" xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" xmlns:taskbar="http://schemas.microsoft.com/Start/2014/TaskbarLayout" Version="1">',
@@ -236,38 +202,32 @@ jobs:
           '</LayoutModificationTemplate>'
         )
         $xmlLines | Set-Content -Path $xmlPath -Encoding UTF8
-
         $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer"
         if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
         Set-ItemProperty -Path $regPath -Name "StartLayoutFile" -Value $xmlPath -Type String -Force
         Set-ItemProperty -Path $regPath -Name "LockedStartLayout" -Value 1 -Type DWord -Force
-        
         $desktopBag = "HKCU:\Software\Microsoft\Windows\Shell\Bags\1\Desktop"
         if (Test-Path $desktopBag) {
             Set-ItemProperty -Path $desktopBag -Name "FFlags" -Value 1075839525 -Type DWord -Force
         }
-
         Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -Recurse -Force -ErrorAction SilentlyContinue
         Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 3
         Start-Process explorer.exe
         Start-Sleep -Seconds 3
 
-    - name: Bağlantı Bilgilerini Göster ve Oturumu Açık Tut
+    - name: 10. Bağlantı & Gizleme
       shell: pwsh
       run: |
         $tsIP = (tailscale ip -4).Trim()
         $hours = [int]"${{ github.event.inputs.keep_alive_hours }}"
         if ($hours -le 0) { $hours = 6 }
         $seconds = $hours * 3600
-        
         Stop-Process -Name "tailscale-ipn" -Force -ErrorAction SilentlyContinue
         Stop-Process -Name "ServiceFabricLocalClusterManager" -Force -ErrorAction SilentlyContinue
         Stop-Process -Name "msedge" -Force -ErrorAction SilentlyContinue
-        
         $shellApp = New-Object -ComObject Shell.Application
         $shellApp.Windows() | Where-Object { $_.Name -eq 'File Explorer' -or $_.LocationName -eq 'Home' } | ForEach-Object { $_.Quit() }
-        
         Write-Host "=================================================="
         Write-Host "  RDP HAZIR (ERROR-4004 - FULL PERFORMANS)"
         Write-Host "=================================================="
@@ -276,7 +236,6 @@ jobs:
         Write-Host "  Şifre        : ERROR-1234"
         Write-Host "  Süre         : $hours saat"
         Write-Host "=================================================="
-        
         $hideJob = {
             $csharpCode = 'using System; using System.Runtime.InteropServices; using System.Text; public class WinHider { [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam); public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam); [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd); }'
             Add-Type -TypeDefinition $csharpCode
@@ -297,8 +256,5 @@ jobs:
                 Start-Sleep -Seconds 2
             }
         }
-        
         Start-Job -ScriptBlock $hideJob | Out-Null
-        Write-Host "Arka plan pencere gizleyici aktif edildi."
-        
         Start-Sleep -Seconds $seconds
