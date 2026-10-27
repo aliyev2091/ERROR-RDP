@@ -10,13 +10,12 @@ on:
 
 jobs:
   build:
-    # Public repo ise 4 vCPU / 16 GB. Larger runner için: runs-on: [self-hosted, windows, gpu]
     runs-on: windows-latest
     timeout-minutes: 360
 
     steps:
     - name: Tailscale Kur ve Bağlan
-      uses: tailscale/github-action@v2
+      uses: tailscale/github-action@v4
       with:
         authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
         version: latest
@@ -24,13 +23,10 @@ jobs:
     - name: RDP Etkinleştir ve Ağ Ayarları
       shell: pwsh
       run: |
-        # RDP servisini etkinleştir
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 2
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-
-        # TCP gecikmesini azalt (Nagle algoritmasını devre dışı bırak)
         $tcpParams = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces"
         Get-ChildItem $tcpParams | ForEach-Object {
             Set-ItemProperty -Path $_.PSPath -Name "TcpNoDelay" -Value 1 -Type DWord -Force
@@ -42,38 +38,24 @@ jobs:
       run: |
         $tsPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
         if (!(Test-Path $tsPath)) { New-Item -Path $tsPath -Force | Out-Null }
-
-        # Grafik hızlandırma ve RemoteFX
         Set-ItemProperty -Path $tsPath -Name "fEnableVirtualizedGraphics" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $tsPath -Name "bEnumerateHWBeforeSW" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $tsPath -Name "AVCHardwareEncodePreferred" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $tsPath -Name "AVC444ModePreferred" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $tsPath -Name "SelectTransport" -Value 0 -Type DWord -Force
-
-        # 60 FPS hedefi ve sıkıştırma
         Set-ItemProperty -Path $tsPath -Name "VGOptimization_CaptureFrameRate" -Value 60 -Type DWord -Force
         Set-ItemProperty -Path $tsPath -Name "ImageQuality" -Value 3 -Type DWord -Force
         Set-ItemProperty -Path $tsPath -Name "MaxCompressionLevel" -Value 2 -Type DWord -Force
-
-        # DWM kare aralığı (60 FPS)
         $wsPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations"
         Set-ItemProperty -Path $wsPath -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
-
-        # Yapay gecikmeyi kaldır
         $rdpTcpPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
         Set-ItemProperty -Path $rdpTcpPath -Name "InteractiveDelay" -Value 0 -Type DWord -Force
-
-        # TermDD akış kontrolünü optimize et
         $termddPath = "HKLM:\SYSTEM\CurrentControlSet\Services\TermDD"
         Set-ItemProperty -Path $termddPath -Name "FlowControlDisable" -Value 0 -Type DWord -Force
         Set-ItemProperty -Path $termddPath -Name "FlowControlDisplayBandwidth" -Value 16 -Type DWord -Force
         Set-ItemProperty -Path $termddPath -Name "FlowControlChannelBandwidth" -Value 144 -Type DWord -Force
-
-        # Sistem yanıt verme önceliği (multimedya kısıtlamasını kaldır)
         $mmPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
         Set-ItemProperty -Path $mmPath -Name "SystemResponsiveness" -Value 0 -Type DWord -Force
-
-        # Ağ bant genişliği kısıtlamasını kaldır
         $lanmanPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
         Set-ItemProperty -Path $lanmanPath -Name "DisableBandwidthThrottling" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $lanmanPath -Name "DisableLargeMtu" -Value 0 -Type DWord -Force
@@ -81,15 +63,9 @@ jobs:
     - name: Windows Görsel Efektleri ve Güç Planını Optimize Et
       shell: pwsh
       run: |
-        # Görsel efektleri "En iyi performans" için ayarla
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Type DWord -Force
-
-        # Yüksek performans güç planını etkinleştir
         powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null
-        # Eski "Yüksek performans" GUID'i yoksa nihai performansı dene
         if ($LASTEXITCODE -ne 0) { powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null }
-
-        # Gereksiz arka plan hizmetlerini durdur (performans için)
         $services = @("SysMain", "WSearch", "Spooler")
         foreach ($svc in $services) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
@@ -109,7 +85,6 @@ jobs:
         $hours = [int]"${{ github.event.inputs.keep_alive_hours }}"
         if ($hours -le 0) { $hours = 6 }
         $seconds = $hours * 3600
-
         Write-Host "=================================================="
         Write-Host "  RDP HAZIR (ERROR-4004 - FULL PERFORMANS)"
         Write-Host "=================================================="
@@ -118,7 +93,4 @@ jobs:
         Write-Host "  Şifre        : ERROR-1234"
         Write-Host "  Süre         : $hours saat"
         Write-Host "=================================================="
-        Write-Host "İstemci tarafında Tailscale açık olmalıdır."
-        Write-Host "Uzak Masaüstü Bağlantısı'na yukarıdaki IP'yi girin."
-
         Start-Sleep -Seconds $seconds
