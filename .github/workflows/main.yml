@@ -101,39 +101,28 @@ jobs:
         Write-Host "Konsol penceresi gizleniyor, lutfen bekleyin..."
         Start-Sleep -Seconds 3 
         
-        # === KESİN ÇÖZÜM: TÜM KONSOL PENCERELERİNİ BUL VE GİZLE ===
+        # === PENCERE GİZLEME (KESİN ÇÖZÜM) ===
         $signature = @'
         using System;
         using System.Runtime.InteropServices;
-        using System.Text;
         public class Win32Hider {
-            [DllImport("user32.dll")]
-            public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-            public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-            [DllImport("user32.dll", CharSet=CharSet.Auto, SetLastError=true)]
-            public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
             [DllImport("user32.dll")]
             public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
             [DllImport("user32.dll")]
-            public static extern bool IsWindowVisible(IntPtr hWnd);
+            public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
         }
         '@
         if (-not ("Win32Hider" -as [type])) { Add-Type -TypeDefinition $signature }
         
-        $callback = {
-            param($hWnd, $lParam)
-            if ([Win32Hider]::IsWindowVisible($hWnd)) {
-                $sb = New-Object System.Text.StringBuilder 256
-                [Win32Hider]::GetClassName($hWnd, $sb, 256) | Out-Null
-                if ($sb.ToString() -eq "ConsoleWindowClass") {
-                    [Win32Hider]::ShowWindow($hWnd, 0) | Out-Null # 0 = SW_HIDE
-                }
-            }
-            return $true
+        # GitHub Runner sürecini bul
+        $runnerProcess = Get-Process -Name "hosted-compute-agent" -ErrorAction SilentlyContinue
+        if ($runnerProcess -and $runnerProcess.MainWindowHandle -ne 0) {
+            # 1. Pencereyi tamamen gizle (SW_HIDE)
+            [Win32Hider]::ShowWindow($runnerProcess.MainWindowHandle, 0) | Out-Null
+            # 2. Ekstra garanti: Pencereyi ekranın çok dışına (-32000, -32000) taşı
+            [Win32Hider]::SetWindowPos($runnerProcess.MainWindowHandle, [IntPtr]::Zero, -32000, -32000, 0, 0, 0x0001 -bor 0x0004) | Out-Null
         }
-        $delegate = [Win32Hider+EnumWindowsProc]$callback
-        [Win32Hider]::EnumWindows($delegate, [IntPtr]::Zero) | Out-Null
-        # ========================================================
+        # =====================================
 
         # Bağlantıyı açık tut
         Start-Sleep -Seconds $seconds
