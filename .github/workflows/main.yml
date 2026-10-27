@@ -64,16 +64,16 @@ jobs:
     - name: Windows Defender'ı Tamamen Kaldır (Uninstall)
       shell: pwsh
       run: |
-        # 1. Tamper Protection'ı devre dışı bırak (Kurcalamaya Karşı Koruma)
-        $tpPath = "HKLM:\SOFTWARE\Microsoft\Windows Defender\Features"
-        if (Test-Path $tpPath) {
-            Set-ItemProperty -Path $tpPath -Name "TamperProtection" -Value 0 -Type DWord -Force
+        # 1. Önce Tamper Protection'ı PowerShell ile devre dışı bırak (Set-MpPreference yöntemi)
+        # Bu komut, kayıt defterine erişmeye çalışmadan önce korumayı kaldırır.
+        try {
+            Set-MpPreference -DisableTamperProtection $true -ErrorAction Stop
+            Write-Host "Tamper Protection başarıyla devre dışı bırakıldı."
+        } catch {
+            Write-Host "Set-MpPreference ile Tamper Protection kapatılamadı, kayıt defteri yöntemi denenecek..."
         }
-        $tpPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Features"
-        if (!(Test-Path $tpPolicyPath)) { New-Item -Path $tpPolicyPath -Force | Out-Null }
-        Set-ItemProperty -Path $tpPolicyPath -Name "TamperProtection" -Value 0 -Type DWord -Force
 
-        # 2. Defender'ı devre dışı bırakmak için kayıt defteri politikalarını zorla
+        # 2. Kayıt defteri politikalarını zorla (Eğer hala açıksa)
         $defenderPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
         if (!(Test-Path $defenderPath)) { New-Item -Path $defenderPath -Force | Out-Null }
         Set-ItemProperty -Path $defenderPath -Name "DisableAntiSpyware" -Value 1 -Type DWord -Force
@@ -94,9 +94,11 @@ jobs:
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
         }
 
-        # 4. Defender özelliğini sistemden tamamen kaldır (Windows Server 2016+)
+        # 4. Defender özelliğini sistemden tamamen kaldır (Windows Server 2019/2022/2025)
+        # Bu komut, Defender'ı sistemden tamamen siler.
         try {
-            Uninstall-WindowsFeature -Name Windows-Defender -ErrorAction SilentlyContinue
+            Uninstall-WindowsFeature -Name Windows-Defender -ErrorAction Stop
+            Write-Host "Windows Defender özelliği başarıyla kaldırıldı."
         } catch {
             Write-Host "Defender özelliği kaldırılamadı, servisler devre dışı bırakıldı."
         }
