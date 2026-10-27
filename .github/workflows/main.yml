@@ -158,11 +158,12 @@ jobs:
         $seconds = $hours * 3600
         
         # === AÇILAN GEREKSİZ PENCERELERİ KAPAT ===
-        # Tailscale arayüzünü ve açık olan dosya gezgini pencerelerini kapat
+        # Tailscale arayüzünü kapat
         Stop-Process -Name "tailscale-ipn" -Force -ErrorAction SilentlyContinue
-        Stop-Process -Name "explorer" -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-        Start-Process explorer.exe
+        
+        # Windows'un RDP açılışında zorla açtığı Dosya Gezgini penceresini kapat
+        $shellApp = New-Object -ComObject Shell.Application
+        $shellApp.Windows() | Where-Object { $_.Name -eq 'File Explorer' -or $_.LocationName -eq 'Home' } | ForEach-Object { $_.Quit() }
         # ==========================================
         
         Write-Host "=================================================="
