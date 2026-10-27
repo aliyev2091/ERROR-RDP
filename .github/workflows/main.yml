@@ -61,13 +61,34 @@ jobs:
         Set-ItemProperty -Path $lanmanPath -Name "DisableBandwidthThrottling" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $lanmanPath -Name "DisableLargeMtu" -Value 0 -Type DWord -Force
 
-    - name: Windows Görsel Efektleri ve Güç Planını Optimize Et
+    - name: Gereksiz Servisleri Kapat ve Güç Planını Optimize Et
       shell: pwsh
       run: |
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Type DWord -Force
         powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null
         if ($LASTEXITCODE -ne 0) { powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null }
-        $services = @("SysMain", "WSearch", "Spooler")
+        
+        # Kapatılacak Gereksiz Servisler Listesi (RDP'yi etkilemeyenler)
+        $services = @(
+            "SysMain",              # Superfetch (Disk/RAM sömürür)
+            "WSearch",              # Windows Arama
+            "Spooler",              # Yazıcı Biriktiricisi
+            "wuauserv",             # Windows Update
+            "bthserv",              # Bluetooth Desteği
+            "lfsvc",                # Konum Hizmeti
+            "TabletInputService",   # Dokunmatik Klavye
+            "RemoteRegistry",       # Uzak Kayıt Defteri (Güvenlik riski)
+            "WerSvc",               # Windows Hata Raporlama
+            "DiagTrack",            # Telemetri
+            "dmwappushservice",     # Cihaz Yönetimi
+            "MapsBroker",           # Harita İndirmeleri
+            "XblAuthManager",       # Xbox Live
+            "XblGameSave",          # Xbox Live
+            "XboxNetApiSvc",        # Xbox Live
+            "WMPNetworkSvc",        # Windows Media Player Ağ Paylaşımı
+            "SNMPTRAP"              # SNMP Tuzağı
+        )
+        
         foreach ($svc in $services) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
@@ -82,7 +103,7 @@ jobs:
     - name: Masaüstünü ve Görev Çubuğunu Temizle
       shell: pwsh
       run: |
-        # 1. MASAÜSTÜNÜ TEMİZLE (Chrome ve Çöp Kutusu kalsın)
+        # 1. MASAÜSTÜNÜ TEMİZLE
         $desktopPaths = @("C:\Users\Public\Desktop", "C:\Users\runneradmin\Desktop")
         foreach ($path in $desktopPaths) {
             if (Test-Path $path) {
@@ -136,7 +157,7 @@ jobs:
         Set-ItemProperty -Path $regPath -Name "StartLayoutFile" -Value $xmlPath -Type String -Force
         Set-ItemProperty -Path $regPath -Name "LockedStartLayout" -Value 1 -Type DWord -Force
         
-        # 5. MASAÜSTÜ SİMGELERİNİ OTOMATİK DİZ (Çöp Kutusu üstte, Chrome altında)
+        # 5. MASAÜSTÜ SİMGELERİNİ OTOMATİK DİZ
         $desktopBag = "HKCU:\Software\Microsoft\Windows\Shell\Bags\1\Desktop"
         if (Test-Path $desktopBag) {
             Set-ItemProperty -Path $desktopBag -Name "FFlags" -Value 1075839525 -Type DWord -Force
@@ -157,14 +178,10 @@ jobs:
         if ($hours -le 0) { $hours = 6 }
         $seconds = $hours * 3600
         
-        # === AÇILAN GEREKSİZ PENCERELERİ KAPAT ===
-        # Tailscale arayüzünü kapat
+        # Açılan gereksiz pencereleri kapat
         Stop-Process -Name "tailscale-ipn" -Force -ErrorAction SilentlyContinue
-        
-        # Windows'un RDP açılışında zorla açtığı Dosya Gezgini penceresini kapat
         $shellApp = New-Object -ComObject Shell.Application
         $shellApp.Windows() | Where-Object { $_.Name -eq 'File Explorer' -or $_.LocationName -eq 'Home' } | ForEach-Object { $_.Quit() }
-        # ==========================================
         
         Write-Host "=================================================="
         Write-Host "  RDP HAZIR (ERROR-4004 - FULL PERFORMANS)"
