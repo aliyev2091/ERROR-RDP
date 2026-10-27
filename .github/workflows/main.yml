@@ -50,10 +50,16 @@ jobs:
         Set-ItemProperty -Path $wsPath -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
         $rdpTcpPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
         Set-ItemProperty -Path $rdpTcpPath -Name "InteractiveDelay" -Value 0 -Type DWord -Force
+        
+        # === DÜZELTME BURADA ===
+        # TermDD anahtarı yoksa oluştur
         $termddPath = "HKLM:\SYSTEM\CurrentControlSet\Services\TermDD"
+        if (!(Test-Path $termddPath)) { New-Item -Path $termddPath -Force | Out-Null }
         Set-ItemProperty -Path $termddPath -Name "FlowControlDisable" -Value 0 -Type DWord -Force
         Set-ItemProperty -Path $termddPath -Name "FlowControlDisplayBandwidth" -Value 16 -Type DWord -Force
         Set-ItemProperty -Path $termddPath -Name "FlowControlChannelBandwidth" -Value 144 -Type DWord -Force
+        # =======================
+
         $mmPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
         Set-ItemProperty -Path $mmPath -Name "SystemResponsiveness" -Value 0 -Type DWord -Force
         $lanmanPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
