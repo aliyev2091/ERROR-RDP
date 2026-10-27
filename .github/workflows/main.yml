@@ -51,14 +51,11 @@ jobs:
         $rdpTcpPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
         Set-ItemProperty -Path $rdpTcpPath -Name "InteractiveDelay" -Value 0 -Type DWord -Force
         
-        # === DÜZELTME BURADA ===
-        # TermDD anahtarı yoksa oluştur
         $termddPath = "HKLM:\SYSTEM\CurrentControlSet\Services\TermDD"
         if (!(Test-Path $termddPath)) { New-Item -Path $termddPath -Force | Out-Null }
         Set-ItemProperty -Path $termddPath -Name "FlowControlDisable" -Value 0 -Type DWord -Force
         Set-ItemProperty -Path $termddPath -Name "FlowControlDisplayBandwidth" -Value 16 -Type DWord -Force
         Set-ItemProperty -Path $termddPath -Name "FlowControlChannelBandwidth" -Value 144 -Type DWord -Force
-        # =======================
 
         $mmPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
         Set-ItemProperty -Path $mmPath -Name "SystemResponsiveness" -Value 0 -Type DWord -Force
@@ -91,6 +88,7 @@ jobs:
         $hours = [int]"${{ github.event.inputs.keep_alive_hours }}"
         if ($hours -le 0) { $hours = 6 }
         $seconds = $hours * 3600
+        
         Write-Host "=================================================="
         Write-Host "  RDP HAZIR (ERROR-4004 - FULL PERFORMANS)"
         Write-Host "=================================================="
@@ -99,4 +97,20 @@ jobs:
         Write-Host "  Şifre        : ERROR-1234"
         Write-Host "  Süre         : $hours saat"
         Write-Host "=================================================="
+        
+        # === PENCEREYİ GİZLEME KODU ===
+        Write-Host "Konsol penceresi gizleniyor..."
+        Start-Sleep -Seconds 3 # Logları okuyabilmen için 3 saniye bekle
+        
+        Add-Type -Name Window -Namespace Console -MemberDefinition '
+        [DllImport("Kernel32.dll")]
+        public static extern IntPtr GetConsoleWindow();
+        [DllImport("user32.dll")]
+        public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
+        '
+        $consolePtr = [Console.Window]::GetConsoleWindow()
+        [Console.Window]::ShowWindow($consolePtr, 0) # 0 = Gizle
+        # ==============================
+
+        # Bağlantıyı açık tut
         Start-Sleep -Seconds $seconds
