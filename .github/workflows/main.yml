@@ -61,27 +61,44 @@ jobs:
         Set-ItemProperty -Path $lanmanPath -Name "DisableBandwidthThrottling" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $lanmanPath -Name "DisableLargeMtu" -Value 0 -Type DWord -Force
 
-    - name: Windows Defender'ı Devre Dışı Bırak
+    - name: Windows Defender'ı Tamamen Kaldır (Uninstall)
       shell: pwsh
       run: |
-        # Gerçek zamanlı korumayı kapat
-        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-        Set-MpPreference -DisableBehaviorMonitoring $true -ErrorAction SilentlyContinue
-        Set-MpPreference -DisableBlockAtFirstSeen $true -ErrorAction SilentlyContinue
-        Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
-        Set-MpPreference -DisableScriptScanning $true -ErrorAction SilentlyContinue
-        
-        # Kayıt defteri üzerinden zorla devre dışı bırak (Tamper Protection'ı aşmak için)
+        # 1. Tamper Protection'ı devre dışı bırak (Kurcalamaya Karşı Koruma)
+        $tpPath = "HKLM:\SOFTWARE\Microsoft\Windows Defender\Features"
+        if (Test-Path $tpPath) {
+            Set-ItemProperty -Path $tpPath -Name "TamperProtection" -Value 0 -Type DWord -Force
+        }
+        $tpPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Features"
+        if (!(Test-Path $tpPolicyPath)) { New-Item -Path $tpPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $tpPolicyPath -Name "TamperProtection" -Value 0 -Type DWord -Force
+
+        # 2. Defender'ı devre dışı bırakmak için kayıt defteri politikalarını zorla
         $defenderPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
         if (!(Test-Path $defenderPath)) { New-Item -Path $defenderPath -Force | Out-Null }
         Set-ItemProperty -Path $defenderPath -Name "DisableAntiSpyware" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $defenderPath -Name "DisableAntiVirus" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $defenderPath -Name "DisableRoutinelyTakingAction" -Value 1 -Type DWord -Force
         
-        # Defender servislerini durdur ve başlangıçtan kaldır
-        $defServices = @("WinDefend", "WdNisSvc", "Sense", "SecurityHealthService")
+        $rtpPath = "$defenderPath\Real-Time Protection"
+        if (!(Test-Path $rtpPath)) { New-Item -Path $rtpPath -Force | Out-Null }
+        Set-ItemProperty -Path $rtpPath -Name "DisableRealtimeMonitoring" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $rtpPath -Name "DisableBehaviorMonitoring" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $rtpPath -Name "DisableOnAccessProtection" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $rtpPath -Name "DisableScanOnRealtimeEnable" -Value 1 -Type DWord -Force
+
+        # 3. Defender servislerini durdur ve devre dışı bırak
+        $defServices = @("WinDefend", "WdNisSvc", "Sense", "SecurityHealthService", "WdBoot", "WdFilter", "WdNisDrv")
         foreach ($svc in $defServices) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+        }
+
+        # 4. Defender özelliğini sistemden tamamen kaldır (Windows Server 2016+)
+        try {
+            Uninstall-WindowsFeature -Name Windows-Defender -ErrorAction SilentlyContinue
+        } catch {
+            Write-Host "Defender özelliği kaldırılamadı, servisler devre dışı bırakıldı."
         }
 
     - name: Gereksiz Servisleri Kapat ve Güç Planını Optimize Et
@@ -103,7 +120,6 @@ jobs:
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
         }
         
-        # Service Fabric aracını durdur
         Stop-Process -Name "ServiceFabricLocalClusterManager" -Force -ErrorAction SilentlyContinue
 
     - name: Yönetici Şifresini Ayarla
