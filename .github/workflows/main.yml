@@ -26,8 +26,8 @@ jobs:
         $cs = Get-CimInstance Win32_ComputerSystem
         $ramGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 2)
 
-        # Disk Bilgisi
-        $disks = Get-PhysicalDisk | Select-Object FriendlyName, MediaType, @{Name="SizeGB"; Expression={[math]::Round($_.Size / 1GB, 2)}}
+        # Disk Bilgisi (WMI üzerinden arayüz tipini çekiyoruz)
+        $disks = Get-CimInstance Win32_DiskDrive
 
         Write-Host "=================================================="
         Write-Host "        SİSTEM DONANIM BİLGİLERİ"
@@ -37,8 +37,18 @@ jobs:
         Write-Host "  RAM Miktarı: $ramGB GB"
         Write-Host "--------------------------------------------------"
         foreach ($disk in $disks) {
-            $type = if ($disk.MediaType) { $disk.MediaType } else { "Bilinmiyor" }
-            Write-Host "  Disk       : $($disk.FriendlyName) | Tip: $type | Boyut: $($disk.SizeGB) GB"
+            $sizeGB = [math]::Round($disk.Size / 1GB, 2)
+            $interface = $disk.InterfaceType
+            $media = $disk.MediaType
+            
+            # Eğer WMI medya tipini tam veremezse, arayüz tipini (SAS/SCSI) ön plana çıkar
+            if ($media -match "Fixed hard disk media") {
+                $diskType = "HDD ($interface)"
+            } else {
+                $diskType = "$media ($interface)"
+            }
+
+            Write-Host "  Disk       : $($disk.Model) | Tip: $diskType | Boyut: $sizeGB GB"
         }
         Write-Host "=================================================="
 
