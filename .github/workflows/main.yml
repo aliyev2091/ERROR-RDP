@@ -61,6 +61,29 @@ jobs:
         Set-ItemProperty -Path $lanmanPath -Name "DisableBandwidthThrottling" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $lanmanPath -Name "DisableLargeMtu" -Value 0 -Type DWord -Force
 
+    - name: Windows Defender'ı Devre Dışı Bırak
+      shell: pwsh
+      run: |
+        # Gerçek zamanlı korumayı kapat
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableBehaviorMonitoring $true -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableBlockAtFirstSeen $true -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableScriptScanning $true -ErrorAction SilentlyContinue
+        
+        # Kayıt defteri üzerinden zorla devre dışı bırak (Tamper Protection'ı aşmak için)
+        $defenderPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
+        if (!(Test-Path $defenderPath)) { New-Item -Path $defenderPath -Force | Out-Null }
+        Set-ItemProperty -Path $defenderPath -Name "DisableAntiSpyware" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $defenderPath -Name "DisableAntiVirus" -Value 1 -Type DWord -Force
+        
+        # Defender servislerini durdur ve başlangıçtan kaldır
+        $defServices = @("WinDefend", "WdNisSvc", "Sense", "SecurityHealthService")
+        foreach ($svc in $defServices) {
+            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+        }
+
     - name: Gereksiz Servisleri Kapat ve Güç Planını Optimize Et
       shell: pwsh
       run: |
@@ -80,7 +103,7 @@ jobs:
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
         }
         
-        # Service Fabric aracını durdur (Eğer arka planda çalışıyorsa)
+        # Service Fabric aracını durdur
         Stop-Process -Name "ServiceFabricLocalClusterManager" -Force -ErrorAction SilentlyContinue
 
     - name: Yönetici Şifresini Ayarla
@@ -161,7 +184,6 @@ jobs:
         if ($hours -le 0) { $hours = 6 }
         $seconds = $hours * 3600
         
-        # Açılan gereksiz pencereleri ve simgeleri kapat
         Stop-Process -Name "tailscale-ipn" -Force -ErrorAction SilentlyContinue
         Stop-Process -Name "ServiceFabricLocalClusterManager" -Force -ErrorAction SilentlyContinue
         
