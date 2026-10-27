@@ -79,6 +79,44 @@ jobs:
         $securePass = ConvertTo-SecureString -AsPlainText "ERROR-1234" -Force
         Set-LocalUser -Name "runneradmin" -Password $securePass
 
+    - name: Masaüstünü ve Görev Çubuğunu Temizle
+      shell: pwsh
+      run: |
+        # 1. MASAÜSTÜNÜ TEMİZLE
+        $desktopPaths = @("C:\Users\Public\Desktop", "C:\Users\runneradmin\Desktop")
+        foreach ($path in $desktopPaths) {
+            if (Test-Path $path) {
+                # Chrome dışındaki tüm .lnk (kısayol) dosyalarını sil
+                Get-ChildItem -Path $path -Filter *.lnk -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "Google Chrome" } | Remove-Item -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        # 2. GÖREV ÇUBUĞUNU TEMİZLE (Sadece Chrome ve Dosya Gezgini kalsın)
+        $taskbarPath = "C:\Users\runneradmin\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+        if (Test-Path $taskbarPath) {
+            Get-ChildItem -Path $taskbarPath -Filter *.lnk -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+            
+            # Chrome ve Dosya Gezgini'ni Görev Çubuğuna Yeniden Sabitle
+            $shell = New-Object -ComObject WScript.Shell
+            $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+            $explorerPath = "C:\Windows\explorer.exe"
+
+            if (Test-Path $chromePath) {
+                $shortcut = $shell.CreateShortcut("$taskbarPath\Google Chrome.lnk")
+                $shortcut.TargetPath = $chromePath
+                $shortcut.Save()
+            }
+            if (Test-Path $explorerPath) {
+                $shortcut = $shell.CreateShortcut("$taskbarPath\File Explorer.lnk")
+                $shortcut.TargetPath = $explorerPath
+                $shortcut.Save()
+            }
+        }
+
+        # Değişikliklerin uygulanması için Explorer'ı yeniden başlat
+        Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+
     - name: Bağlantı Bilgilerini Göster ve Oturumu Açık Tut
       shell: pwsh
       run: |
