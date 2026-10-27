@@ -79,10 +79,10 @@ jobs:
         $securePass = ConvertTo-SecureString -AsPlainText "ERROR-1234" -Force
         Set-LocalUser -Name "runneradmin" -Password $securePass
 
-    - name: Masaüstünü ve Görev Çubuğunu Temizle
+    - name: Masaüstü Temizliği ve Chrome Ayarları
       shell: pwsh
       run: |
-        # 1. MASAÜSTÜNÜ TEMİZLE (Chrome ve Çöp Kutusu kalsın)
+        # 1. MASAÜSTÜNÜ TEMİZLE
         $desktopPaths = @("C:\Users\Public\Desktop", "C:\Users\runneradmin\Desktop")
         foreach ($path in $desktopPaths) {
             if (Test-Path $path) {
@@ -90,40 +90,52 @@ jobs:
             }
         }
 
-        # 2. GÖREV ÇUBUĞUNU XML İLE SIFIRLA (Edge'yi zorla kaldırır)
-        $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
-        $xmlDir = "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Shell"
-        if (!(Test-Path $xmlDir)) { New-Item -ItemType Directory -Path $xmlDir -Force | Out-Null }
-        $xmlPath = "$xmlDir\LayoutModification.xml"
+        # 2. GÖREV ÇUBUĞU KISAYOLLARINI SIFIRLA VE CHROME EKLE
+        $taskbarPath = "C:\Users\runneradmin\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+        if (!(Test-Path $taskbarPath)) { New-Item -ItemType Directory -Path $taskbarPath -Force | Out-Null }
+        
+        # Mevcut görev çubuğu kısayollarını sil
+        Get-ChildItem -Path $taskbarPath -Filter *.lnk -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        
+        # Dosya Gezginini Ekle
+        $shell = New-Object -ComObject WScript.Shell
+        $explorerLnk = $shell.CreateShortcut("$taskbarPath\File Explorer.lnk")
+        $explorerLnk.TargetPath = "C:\Windows\explorer.exe"
+        $explorerLnk.Save()
 
-        # YAML'ı bozmayan dizi tabanlı XML oluşturma
+        # Chrome'u Ekle
+        $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+        if (Test-Path $chromePath) {
+            $chromeLnk = $shell.CreateShortcut("$taskbarPath\Google Chrome.lnk")
+            $chromeLnk.TargetPath = $chromePath
+            $chromeLnk.Save()
+        }
+
+        # 3. CHROME'U VARSAYILAN TARAYICI YAP (DISM XML)
+        $xmlDir = "C:\Users\runneradmin\AppData\Local\Temp"
+        $xmlPath = "$xmlDir\DefaultAssociations.xml"
         $xmlLines = @(
-          '<?xml version="1.0" encoding="utf-8"?>',
-          '<LayoutModificationTemplate xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" Version="1" xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification">',
-          '  <LayoutOptions StartTileGroupCellWidth="6" />',
-          '  <DefaultLayoutOverride>',
-          '    <StartLayoutCollection>',
-          '      <defaultlayout:StartLayout GroupCellWidth="6" />',
-          '    </StartLayoutCollection>',
-          '  </DefaultLayoutOverride>',
-          '  <CustomTaskbarLayoutCollection PinListPlacement="Replace">',
-          '    <defaultlayout:TaskbarLayout>',
-          '      <taskbar:TaskbarPinList>',
-          '        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\System Tools\File Explorer.lnk" />',
-          "        <taskbar:DesktopApp DesktopApplicationLinkPath=`"$chromePath`" />",
-          '      </taskbar:TaskbarPinList>',
-          '    </defaultlayout:TaskbarLayout>',
-          '  </CustomTaskbarLayoutCollection>',
-          '</LayoutModificationTemplate>'
+          '<?xml version="1.0" encoding="UTF-8"?>',
+          '<DefaultAssociations>',
+          '  <Association Identifier="http" ProgId="ChromeHTML" ApplicationName="Google Chrome" />',
+          '  <Association Identifier="https" ProgId="ChromeHTML" ApplicationName="Google Chrome" />',
+          '  <Association Identifier=".htm" ProgId="ChromeHTML" ApplicationName="Google Chrome" />',
+          '  <Association Identifier=".html" ProgId="ChromeHTML" ApplicationName="Google Chrome" />',
+          '</DefaultAssociations>'
         )
         $xmlLines | Set-Content -Path $xmlPath -Encoding UTF8
+        Dism /Online /Import-DefaultAppAssociations:"$xmlPath" | Out-Null
 
-        # Kayıt defterindeki eski çubuk ayarlarını sil ki Windows yeni XML'i okusun
-        Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -Recurse -Force -ErrorAction SilentlyContinue
+        # 4. RDP GİRİŞİNDE TAILSCALE VE DOSYA GEZGİNİ PENCERELERİNİ KAPATAN GÖREV OLUŞTUR
+        $cleanupCmd = "Start-Sleep -Seconds 4; Get-Process -Name 'tailscale-ipn' -ErrorAction SilentlyContinue | Stop-Process -Force; `$shell = New-Object -ComObject Shell.Application; `$shell.Windows() | Where-Object { `$_.Name -match 'File Explorer|This PC|Home' } | ForEach-Object { `$_.Quit() }"
         
-        # Değişikliklerin uygulanması için Explorer'ı yeniden başlat
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -Command `"$cleanupCmd`""
+        $trigger = New-ScheduledTaskTrigger -AtLogOn -User "runneradmin"
+        Register-ScheduledTask -TaskName "CleanupOnLogon" -Action $action -Trigger $trigger -RunLevel Highest -Force | Out-Null
+
+        # 5. EXPLORER'I YENİDEN BAŞLAT
         Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 3
+        Start-Sleep -Seconds 2
         Start-Process explorer.exe
         Start-Sleep -Seconds 2
 
