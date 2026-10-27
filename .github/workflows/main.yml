@@ -90,18 +90,29 @@ jobs:
             }
         }
 
-        # 2. CHROME KISAYOLUNU BAŞLAT MENÜSÜNE EKLE (XML'in bulabilmesi için)
+        # 2. KISAYOLLARI BAŞLAT MENÜSÜNE EKLE (XML'in bulabilmesi için)
+        $startMenuDir = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
+        $shell = New-Object -ComObject WScript.Shell
+
+        # Dosya Gezgini (File Explorer) Kısayolu
+        $explorerExe = "C:\Windows\explorer.exe"
+        if (Test-Path $explorerExe) {
+            $expLnk = "$startMenuDir\File Explorer.lnk"
+            $sc = $shell.CreateShortcut($expLnk)
+            $sc.TargetPath = $explorerExe
+            $sc.Save()
+        }
+
+        # Chrome Kısayolu
         $chromeExe = "C:\Program Files\Google\Chrome\Application\chrome.exe"
         if (Test-Path $chromeExe) {
-            $startMenuDir = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
-            $shell = New-Object -ComObject WScript.Shell
             $chromeLnk = "$startMenuDir\Google Chrome.lnk"
             $sc = $shell.CreateShortcut($chromeLnk)
             $sc.TargetPath = $chromeExe
             $sc.Save()
         }
 
-        # 3. XML DOSYASINI OLUŞTUR (DOĞRU NAMESPACE İLE)
+        # 3. XML DOSYASINI OLUŞTUR (Sıralama: Önce Explorer, Sonra Chrome)
         $xmlDir = "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Shell"
         if (!(Test-Path $xmlDir)) { New-Item -ItemType Directory -Path $xmlDir -Force | Out-Null }
         $xmlPath = "$xmlDir\LayoutModification.xml"
@@ -112,7 +123,7 @@ jobs:
           '  <CustomTaskbarLayoutCollection PinListPlacement="Replace">',
           '    <defaultlayout:TaskbarLayout>',
           '      <taskbar:TaskbarPinList>',
-          '        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\System Tools\File Explorer.lnk" />',
+          '        <taskbar:DesktopApp DesktopApplicationLinkPath="%ALLUSERSPROFILE%\Microsoft\Windows\Start Menu\Programs\File Explorer.lnk" />',
           '        <taskbar:DesktopApp DesktopApplicationLinkPath="%ALLUSERSPROFILE%\Microsoft\Windows\Start Menu\Programs\Google Chrome.lnk" />',
           '      </taskbar:TaskbarPinList>',
           '    </defaultlayout:TaskbarLayout>',
@@ -125,7 +136,7 @@ jobs:
         $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer"
         if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
         Set-ItemProperty -Path $regPath -Name "StartLayoutFile" -Value $xmlPath -Type String -Force
-        Set-ItemProperty -Path $regPath -Name "LockedStartLayout" -Value 1 -Type DWord -Force # Görev çubuğunu kilitle
+        Set-ItemProperty -Path $regPath -Name "LockedStartLayout" -Value 1 -Type DWord -Force
         
         # 5. ÖNBELLEĞİ TEMİZLE VE YENİDEN BAŞLAT
         Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -Recurse -Force -ErrorAction SilentlyContinue
