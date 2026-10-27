@@ -90,23 +90,19 @@ jobs:
             }
         }
 
-        # 2. ÖNCEKİ XML DAYATMALARINI TEMİZLE (Bozuk ayarları sıfırla)
-        $xmlPath = "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Shell\LayoutModification.xml"
-        if (Test-Path $xmlPath) { Remove-Item -Path $xmlPath -Force -ErrorAction SilentlyContinue }
-        Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -Recurse -Force -ErrorAction SilentlyContinue
-
-        # 3. GÖREV ÇUBUĞUNA SADECE İSTENENLERİ SABİTLE
-        $taskbarPath = "C:\Users\runneradmin\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
-        if (!(Test-Path $taskbarPath)) { New-Item -ItemType Directory -Path $taskbarPath -Force | Out-Null }
-        
-        # Klasördeki eski kalıntıları temizle
-        Get-ChildItem -Path $taskbarPath -Filter *.lnk -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-
-        # Kısayolları oluştur
+        # 2. GÖREV ÇUBUĞU İÇİN GEÇİCİ KISAYOLLAR OLUŞTUR (Garantili yol)
+        $tempPath = "C:\Temp"
+        if (!(Test-Path $tempPath)) { New-Item -ItemType Directory -Path $tempPath -Force | Out-Null }
         $shell = New-Object -ComObject WScript.Shell
+        
+        # Explorer Kısayolu
+        $expLnk = "$tempPath\Explorer.lnk"
+        $sc = $shell.CreateShortcut($expLnk)
+        $sc.TargetPath = "C:\Windows\explorer.exe"
+        $sc.Save()
 
         # Chrome Kısayolu
-        $chromeLnk = "$taskbarPath\Google Chrome.lnk"
+        $chromeLnk = "$tempPath\Chrome.lnk"
         $chromeExe = "C:\Program Files\Google\Chrome\Application\chrome.exe"
         if (Test-Path $chromeExe) {
             $sc = $shell.CreateShortcut($chromeLnk)
@@ -114,19 +110,45 @@ jobs:
             $sc.Save()
         }
 
-        # Dosya Gezgini Kısayolu
-        $explorerLnk = "$taskbarPath\File Explorer.lnk"
-        $explorerExe = "C:\Windows\explorer.exe"
-        if (Test-Path $explorerExe) {
-            $sc = $shell.CreateShortcut($explorerLnk)
-            $sc.TargetPath = $explorerExe
-            $sc.Save()
-        }
+        # 3. XML OLUŞTUR VE ZORLA UYGULA
+        $xmlPath = "$tempPath\LayoutModification.xml"
+        
+        # YAML'ı bozmayan dizi tabanlı XML
+        $xmlLines = @(
+          '<?xml version="1.0" encoding="utf-8"?>',
+          '<LayoutModificationTemplate xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" Version="1" xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification">',
+          '  <LayoutOptions StartTileGroupCellWidth="6" />',
+          '  <DefaultLayoutOverride>',
+          '    <StartLayoutCollection>',
+          '      <defaultlayout:StartLayout GroupCellWidth="6" />',
+          '    </StartLayoutCollection>',
+          '  </DefaultLayoutOverride>',
+          '  <CustomTaskbarLayoutCollection PinListPlacement="Replace">',
+          '    <defaultlayout:TaskbarLayout>',
+          '      <taskbar:TaskbarPinList>',
+          "        <taskbar:DesktopApp DesktopApplicationLinkPath=`"$expLnk`" />",
+          "        <taskbar:DesktopApp DesktopApplicationLinkPath=`"$chromeLnk`" />",
+          '      </taskbar:TaskbarPinList>',
+          '    </defaultlayout:TaskbarLayout>',
+          '  </CustomTaskbarLayoutCollection>',
+          '</LayoutModificationTemplate>'
+        )
+        $xmlLines | Set-Content -Path $xmlPath -Encoding UTF8
 
-        # Değişikliklerin uygulanması için Explorer'ı yeniden başlat
+        # 4. SİSTEME ZORLA TANIT (Kayıt Defteri Politikası)
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer"
+        if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+        Set-ItemProperty -Path $regPath -Name "StartLayoutFile" -Value $xmlPath -Type String -Force
+        
+        # 5. MEVCUT GÖREV ÇUBUĞU ÖNBELLEĞİNİ TEMİZLE
+        Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -Recurse -Force -ErrorAction SilentlyContinue
+        
+        # 6. EXPLORER'I YENİDEN BAŞLAT VE SİSTEMİ GÜNCELLE
         Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 3
         Start-Process explorer.exe
+        # Sistem parametrelerini güncelle (Politikaların anında okunması için)
+        rundll32.exe user32.dll,UpdatePerUserSystemParameters
         Start-Sleep -Seconds 3
 
     - name: Bağlantı Bilgilerini Göster ve Oturumu Açık Tut
