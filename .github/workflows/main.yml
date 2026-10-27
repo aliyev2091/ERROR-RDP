@@ -137,7 +137,6 @@ jobs:
         Set-ItemProperty -Path $regPath -Name "LockedStartLayout" -Value 1 -Type DWord -Force
         
         # 5. MASAÜSTÜ SİMGELERİNİ OTOMATİK DİZ (Çöp Kutusu üstte, Chrome altında)
-        # Windows'un kendi "Simgeleri otomatik düzenle" özelliğini kayıt defterinden aktif et
         $desktopBag = "HKCU:\Software\Microsoft\Windows\Shell\Bags\1\Desktop"
         if (Test-Path $desktopBag) {
             Set-ItemProperty -Path $desktopBag -Name "FFlags" -Value 1075839525 -Type DWord -Force
@@ -157,6 +156,14 @@ jobs:
         $hours = [int]"${{ github.event.inputs.keep_alive_hours }}"
         if ($hours -le 0) { $hours = 6 }
         $seconds = $hours * 3600
+        
+        # === AÇILAN GEREKSİZ PENCERELERİ KAPAT ===
+        # Tailscale arayüzünü ve açık olan dosya gezgini pencerelerini kapat
+        Stop-Process -Name "tailscale-ipn" -Force -ErrorAction SilentlyContinue
+        Stop-Process -Name "explorer" -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        Start-Process explorer.exe
+        # ==========================================
         
         Write-Host "=================================================="
         Write-Host "  RDP HAZIR (ERROR-4004 - FULL PERFORMANS)"
