@@ -141,10 +141,17 @@ jobs:
         $securePass = ConvertTo-SecureString -AsPlainText "ERROR-1234" -Force
         Set-LocalUser -Name "runneradmin" -Password $securePass
 
-    - name: Varsayılan Tarayıcıyı Chrome Yap
+    - name: Varsayılan Tarayıcıyı Chrome Yap (Zorla)
       shell: pwsh
       run: |
         $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+        
+        # Windows'un varsayılan tarayıcı korumasını (UserChoice Hash) devre dışı bırak
+        Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.html\UserChoice" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.htm\UserChoice" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice" -Recurse -Force -ErrorAction SilentlyContinue
+
         if (Test-Path $chromePath) {
             # HTTP ve HTTPS protokolleri için varsayılan komutu ayarla
             New-Item -Path "HKCU:\Software\Classes\http\shell\open\command" -Force | Out-Null
@@ -160,13 +167,11 @@ jobs:
             New-Item -Path "HKCU:\Software\Classes\.htm" -Force | Out-Null
             Set-ItemProperty -Path "HKCU:\Software\Classes\.htm" -Name "(Default)" -Value "ChromeHTML" -Force
 
-            # ChromeHTML ProgID'sini kaydet (Eğer yoksa)
+            # ChromeHTML ProgID'sini kaydet
             New-Item -Path "HKCU:\Software\Classes\ChromeHTML\shell\open\command" -Force | Out-Null
             Set-ItemProperty -Path "HKCU:\Software\Classes\ChromeHTML\shell\open\command" -Name "(Default)" -Value "`"$chromePath`" -- `"%1`"" -Force
             
-            Write-Host "Chrome varsayılan tarayıcı olarak ayarlandı!"
-        } else {
-            Write-Host "Chrome bulunamadı, varsayılan tarayıcı ayarlanamadı."
+            Write-Host "Chrome varsayılan tarayıcı olarak zorla ayarlandı!"
         }
 
     - name: Karanlık Modu ve Siyah Arka Planı Ayarla
@@ -264,8 +269,10 @@ jobs:
         if ($hours -le 0) { $hours = 6 }
         $seconds = $hours * 3600
         
+        # Gereksiz pencereleri ve Edge'i zorla kapat
         Stop-Process -Name "tailscale-ipn" -Force -ErrorAction SilentlyContinue
         Stop-Process -Name "ServiceFabricLocalClusterManager" -Force -ErrorAction SilentlyContinue
+        Stop-Process -Name "msedge" -Force -ErrorAction SilentlyContinue
         
         $shellApp = New-Object -ComObject Shell.Application
         $shellApp.Windows() | Where-Object { $_.Name -eq 'File Explorer' -or $_.LocationName -eq 'Home' } | ForEach-Object { $_.Quit() }
@@ -287,7 +294,7 @@ jobs:
                 if ([WinHider]::IsWindowVisible($hWnd)) {
                     $sb = New-Object System.Text.StringBuilder 256
                     [WinHider]::GetWindowText($hWnd, $sb, 256) | Out-Null
-                    if ($sb.ToString() -match "Default|Runner|console") {
+                    if ($sb.ToString() -match "Default|Runner|console|Edge") {
                         [WinHider]::ShowWindow($hWnd, 0)
                     }
                 }
