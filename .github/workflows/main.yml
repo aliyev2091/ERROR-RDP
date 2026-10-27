@@ -90,42 +90,44 @@ jobs:
             }
         }
 
-        # 2. GÖREV ÇUBUĞUNU XML İLE SIFIRLA (Edge'yi zorla kaldırır)
-        $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
-        $xmlDir = "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Shell"
-        if (!(Test-Path $xmlDir)) { New-Item -ItemType Directory -Path $xmlDir -Force | Out-Null }
-        $xmlPath = "$xmlDir\LayoutModification.xml"
-
-        # YAML'ı bozmayan dizi tabanlı XML oluşturma
-        $xmlLines = @(
-          '<?xml version="1.0" encoding="utf-8"?>',
-          '<LayoutModificationTemplate xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" Version="1" xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification">',
-          '  <LayoutOptions StartTileGroupCellWidth="6" />',
-          '  <DefaultLayoutOverride>',
-          '    <StartLayoutCollection>',
-          '      <defaultlayout:StartLayout GroupCellWidth="6" />',
-          '    </StartLayoutCollection>',
-          '  </DefaultLayoutOverride>',
-          '  <CustomTaskbarLayoutCollection PinListPlacement="Replace">',
-          '    <defaultlayout:TaskbarLayout>',
-          '      <taskbar:TaskbarPinList>',
-          '        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\System Tools\File Explorer.lnk" />',
-          "        <taskbar:DesktopApp DesktopApplicationLinkPath=`"$chromePath`" />",
-          '      </taskbar:TaskbarPinList>',
-          '    </defaultlayout:TaskbarLayout>',
-          '  </CustomTaskbarLayoutCollection>',
-          '</LayoutModificationTemplate>'
-        )
-        $xmlLines | Set-Content -Path $xmlPath -Encoding UTF8
-
-        # Kayıt defterindeki eski çubuk ayarlarını sil ki Windows yeni XML'i okusun
+        # 2. ÖNCEKİ XML DAYATMALARINI TEMİZLE (Bozuk ayarları sıfırla)
+        $xmlPath = "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Shell\LayoutModification.xml"
+        if (Test-Path $xmlPath) { Remove-Item -Path $xmlPath -Force -ErrorAction SilentlyContinue }
         Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -Recurse -Force -ErrorAction SilentlyContinue
+
+        # 3. GÖREV ÇUBUĞUNA SADECE İSTENENLERİ SABİTLE
+        $taskbarPath = "C:\Users\runneradmin\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+        if (!(Test-Path $taskbarPath)) { New-Item -ItemType Directory -Path $taskbarPath -Force | Out-Null }
         
+        # Klasördeki eski kalıntıları temizle
+        Get-ChildItem -Path $taskbarPath -Filter *.lnk -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+
+        # Kısayolları oluştur
+        $shell = New-Object -ComObject WScript.Shell
+
+        # Chrome Kısayolu
+        $chromeLnk = "$taskbarPath\Google Chrome.lnk"
+        $chromeExe = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+        if (Test-Path $chromeExe) {
+            $sc = $shell.CreateShortcut($chromeLnk)
+            $sc.TargetPath = $chromeExe
+            $sc.Save()
+        }
+
+        # Dosya Gezgini Kısayolu
+        $explorerLnk = "$taskbarPath\File Explorer.lnk"
+        $explorerExe = "C:\Windows\explorer.exe"
+        if (Test-Path $explorerExe) {
+            $sc = $shell.CreateShortcut($explorerLnk)
+            $sc.TargetPath = $explorerExe
+            $sc.Save()
+        }
+
         # Değişikliklerin uygulanması için Explorer'ı yeniden başlat
         Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 3
         Start-Process explorer.exe
-        Start-Sleep -Seconds 2
+        Start-Sleep -Seconds 3
 
     - name: Bağlantı Bilgilerini Göster ve Oturumu Açık Tut
       shell: pwsh
