@@ -90,11 +90,10 @@ jobs:
             }
         }
 
-        # 2. KISAYOLLARI BAŞLAT MENÜSÜNE EKLE (XML'in bulabilmesi için)
+        # 2. KISAYOLLARI BAŞLAT MENÜSÜNE EKLE
         $startMenuDir = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
         $shell = New-Object -ComObject WScript.Shell
 
-        # Dosya Gezgini (File Explorer) Kısayolu
         $explorerExe = "C:\Windows\explorer.exe"
         if (Test-Path $explorerExe) {
             $expLnk = "$startMenuDir\File Explorer.lnk"
@@ -103,7 +102,6 @@ jobs:
             $sc.Save()
         }
 
-        # Chrome Kısayolu
         $chromeExe = "C:\Program Files\Google\Chrome\Application\chrome.exe"
         if (Test-Path $chromeExe) {
             $chromeLnk = "$startMenuDir\Google Chrome.lnk"
@@ -112,7 +110,7 @@ jobs:
             $sc.Save()
         }
 
-        # 3. XML DOSYASINI OLUŞTUR (Sıralama: Önce Explorer, Sonra Chrome)
+        # 3. XML DOSYASINI OLUŞTUR (Görev Çubuğu)
         $xmlDir = "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Shell"
         if (!(Test-Path $xmlDir)) { New-Item -ItemType Directory -Path $xmlDir -Force | Out-Null }
         $xmlPath = "$xmlDir\LayoutModification.xml"
@@ -132,18 +130,85 @@ jobs:
         )
         $xmlLines | Set-Content -Path $xmlPath -Encoding UTF8
 
-        # 4. SİSTEME ZORLA TANIT (Politika ve Kilit)
+        # 4. GÖREV ÇUBUĞU POLİTİKASINI UYGULA
         $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer"
         if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
         Set-ItemProperty -Path $regPath -Name "StartLayoutFile" -Value $xmlPath -Type String -Force
         Set-ItemProperty -Path $regPath -Name "LockedStartLayout" -Value 1 -Type DWord -Force
         
-        # 5. ÖNBELLEĞİ TEMİZLE VE YENİDEN BAŞLAT
+        # 5. ÖNBELLEĞİ TEMİZLE VE EXPLORER'I YENİDEN BAŞLAT
         Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -Recurse -Force -ErrorAction SilentlyContinue
         Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 3
         Start-Process explorer.exe
         Start-Sleep -Seconds 3
+
+        # 6. CHROME'U ÇÖP KUTUSUNUN ALTINA HİZALA (P/Invoke Yöntemi)
+        Add-Type @"
+        using System;
+        using System.Runtime.InteropServices;
+        public class DesktopIconMover {
+            [DllImport("user32.dll")]
+            public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+            [DllImport("user32.dll")]
+            public static extern IntPtr FindWindowEx(IntPtr parentHandle, IntPtr childAfter, string className, string windowTitle);
+            [DllImport("user32.dll", CharSet=CharSet.Auto)]
+            public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+            
+            [StructLayout(LayoutKind.Sequential)]
+            public struct LVFINDINFO {
+                public uint flags;
+                public string psz;
+                public IntPtr lParam;
+                public POINT pt;
+                public uint vkDirection;
+            }
+            [StructLayout(LayoutKind.Sequential)]
+            public struct POINT { public int X; public int Y; }
+            
+            public const uint LVM_FINDITEM = 0x100D;
+            public const uint LVM_SETITEMPOSITION = 0x100F;
+            public const uint LVFI_STRING = 0x0002;
+
+            public static void MoveIcon(IntPtr hwnd, string iconName, int x, int y) {
+                LVFINDINFO lvfi = new LVFINDINFO();
+                lvfi.flags = LVFI_STRING;
+                lvfi.psz = iconName;
+                
+                IntPtr ptr = Marshal.AllocHGlobal(Marshal.SizeOf(lvfi));
+                Marshal.StructureToPtr(lvfi, ptr, false);
+                
+                IntPtr itemIndex = SendMessage(hwnd, LVM_FINDITEM, new IntPtr(-1), ptr);
+                Marshal.FreeHGlobal(ptr);
+                
+                if (itemIndex != new IntPtr(-1)) {
+                    IntPtr lParam = (IntPtr)((y << 16) | (x & 0xFFFF));
+                    SendMessage(hwnd, LVM_SETITEMPOSITION, itemIndex, lParam);
+                }
+            }
+        }
+"@
+        # Masaüstü penceresini bul ve Chrome'u hizala
+        $progman = [DesktopIconMover]::FindWindow("Progman", $null)
+        $shelldll = [DesktopIconMover]::FindWindowEx($progman, [IntPtr]::Zero, "SHELLDLL_DefView", $null)
+        if ($shelldll -eq [IntPtr]::Zero) {
+            $workerw = [IntPtr]::Zero
+            do {
+                $workerw = [DesktopIconMover]::FindWindowEx([IntPtr]::Zero, $workerw, "WorkerW", $null)
+                $shelldll = [DesktopIconMover]::FindWindowEx($workerw, [IntPtr]::Zero, "SHELLDLL_DefView", $null)
+            } while ($shelldll -eq [IntPtr]::Zero -and $workerw -ne [IntPtr]::Zero)
+        }
+
+        if ($shelldll -ne [IntPtr]::Zero) {
+            $listview = [DesktopIconMover]::FindWindowEx($shelldll, [IntPtr]::Zero, "SysListView32", $null)
+            if ($listview -ne [IntPtr]::Zero) {
+                # Chrome'u 1. sütun (x=15), 2. satıra (y=90) taşı (Çöp Kutusu'nun tam altı)
+                [DesktopIconMover]::MoveIcon($listview, "Google Chrome", 15, 90)
+            }
+        }
+        # Masaüstünü yenile
+        $shellApp = New-Object -ComObject Shell.Application
+        $shellApp.Windows() | ForEach-Object { $_.Refresh() }
 
     - name: Bağlantı Bilgilerini Göster ve Oturumu Açık Tut
       shell: pwsh
