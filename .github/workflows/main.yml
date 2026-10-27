@@ -90,50 +90,30 @@ jobs:
             }
         }
 
-        # 2. GÖREV ÇUBUĞU İÇİN KESİN KISAYOLLAR
-        # Windows'un tam olarak beklediği Kullanıcı Sabitlenmiş klasörü
-        $taskbarDir = "C:\Users\runneradmin\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
-        if (!(Test-Path $taskbarDir)) { New-Item -ItemType Directory -Path $taskbarDir -Force | Out-Null }
-        
-        # Klasörü temizle
-        Get-ChildItem -Path $taskbarDir -Filter *.lnk -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-
-        $shell = New-Object -ComObject WScript.Shell
-        
-        # Explorer Kısayolu
-        $expLnk = "$taskbarDir\File Explorer.lnk"
-        $sc = $shell.CreateShortcut($expLnk)
-        $sc.TargetPath = "C:\Windows\explorer.exe"
-        $sc.Save()
-
-        # Chrome Kısayolu
-        $chromeLnk = "$taskbarDir\Google Chrome.lnk"
+        # 2. CHROME KISAYOLUNU BAŞLAT MENÜSÜNE EKLE (XML'in bulabilmesi için)
         $chromeExe = "C:\Program Files\Google\Chrome\Application\chrome.exe"
         if (Test-Path $chromeExe) {
+            $startMenuDir = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
+            $shell = New-Object -ComObject WScript.Shell
+            $chromeLnk = "$startMenuDir\Google Chrome.lnk"
             $sc = $shell.CreateShortcut($chromeLnk)
             $sc.TargetPath = $chromeExe
             $sc.Save()
         }
 
-        # 3. XML OLUŞTUR (xmlns:taskbar EKLENDİ)
+        # 3. XML DOSYASINI OLUŞTUR (DOĞRU NAMESPACE İLE)
         $xmlDir = "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Shell"
         if (!(Test-Path $xmlDir)) { New-Item -ItemType Directory -Path $xmlDir -Force | Out-Null }
         $xmlPath = "$xmlDir\LayoutModification.xml"
         
         $xmlLines = @(
           '<?xml version="1.0" encoding="utf-8"?>',
-          '<LayoutModificationTemplate xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" Version="1" xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification">',
-          '  <LayoutOptions StartTileGroupCellWidth="6" />',
-          '  <DefaultLayoutOverride>',
-          '    <StartLayoutCollection>',
-          '      <defaultlayout:StartLayout GroupCellWidth="6" />',
-          '    </StartLayoutCollection>',
-          '  </DefaultLayoutOverride>',
+          '<LayoutModificationTemplate xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification" xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" xmlns:taskbar="http://schemas.microsoft.com/Start/2014/TaskbarLayout" Version="1">',
           '  <CustomTaskbarLayoutCollection PinListPlacement="Replace">',
           '    <defaultlayout:TaskbarLayout>',
-          '      <taskbar:TaskbarPinList xmlns:taskbar="http://schemas.microsoft.com/Windows/2010/09/Taskbar">',
-          "        <taskbar:DesktopApp DesktopApplicationLinkPath=`"$expLnk`" />",
-          "        <taskbar:DesktopApp DesktopApplicationLinkPath=`"$chromeLnk`" />",
+          '      <taskbar:TaskbarPinList>',
+          '        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\System Tools\File Explorer.lnk" />',
+          '        <taskbar:DesktopApp DesktopApplicationLinkPath="%ALLUSERSPROFILE%\Microsoft\Windows\Start Menu\Programs\Google Chrome.lnk" />',
           '      </taskbar:TaskbarPinList>',
           '    </defaultlayout:TaskbarLayout>',
           '  </CustomTaskbarLayoutCollection>',
@@ -141,10 +121,11 @@ jobs:
         )
         $xmlLines | Set-Content -Path $xmlPath -Encoding UTF8
 
-        # 4. SİSTEME ZORLA TANIT
+        # 4. SİSTEME ZORLA TANIT (Politika ve Kilit)
         $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer"
         if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
         Set-ItemProperty -Path $regPath -Name "StartLayoutFile" -Value $xmlPath -Type String -Force
+        Set-ItemProperty -Path $regPath -Name "LockedStartLayout" -Value 1 -Type DWord -Force # Görev çubuğunu kilitle
         
         # 5. ÖNBELLEĞİ TEMİZLE VE YENİDEN BAŞLAT
         Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -Recurse -Force -ErrorAction SilentlyContinue
