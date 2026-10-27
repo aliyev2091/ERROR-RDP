@@ -114,11 +114,18 @@ jobs:
         powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null
         if ($LASTEXITCODE -ne 0) { powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null }
         
+        # 1. WINDOWS UPDATE'İ KAYIT DEFTERİNDEN TAMAMEN KAPAT
+        $wuPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+        if (!(Test-Path $wuPath)) { New-Item -Path $wuPath -Force | Out-Null }
+        Set-ItemProperty -Path $wuPath -Name "NoAutoUpdate" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $wuPath -Name "AUOptions" -Value 1 -Type DWord -Force
+
+        # 2. SERVİSLERİ ZORLA DURDUR
         $services = @(
-            "SysMain", "WSearch", "Spooler", "wuauserv", "bthserv", "lfsvc", 
-            "TabletInputService", "RemoteRegistry", "WerSvc", "DiagTrack", 
-            "dmwappushservice", "MapsBroker", "XblAuthManager", "XblGameSave", 
-            "XboxNetApiSvc", "WMPNetworkSvc", "SNMPTRAP"
+            "SysMain", "WSearch", "Spooler", "wuauserv", "UsoSvc", "WaaSMedicSvc", 
+            "bthserv", "lfsvc", "TabletInputService", "RemoteRegistry", "WerSvc", 
+            "DiagTrack", "dmwappushservice", "MapsBroker", "XblAuthManager", 
+            "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc", "SNMPTRAP"
         )
         
         foreach ($svc in $services) {
