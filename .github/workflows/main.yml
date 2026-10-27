@@ -96,19 +96,9 @@ jobs:
         Write-Host "  Süre         : $hours saat"
         Write-Host "=================================================="
         
-        $hideScript = {
-            Add-Type @"
-            using System;
-            using System.Runtime.InteropServices;
-            using System.Text;
-            public class WinHider {
-                [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-                public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-                [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
-                [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-                [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
-            }
-"@
+        $hideJob = {
+            $csharpCode = 'using System; using System.Runtime.InteropServices; using System.Text; public class WinHider { [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam); public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam); [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd); }'
+            Add-Type -TypeDefinition $csharpCode
             $cb = {
                 param($hWnd, $lParam)
                 if ([WinHider]::IsWindowVisible($hWnd)) {
@@ -127,7 +117,7 @@ jobs:
             }
         }
         
-        Start-Job -ScriptBlock $hideScript | Out-Null
+        Start-Job -ScriptBlock $hideJob | Out-Null
         Write-Host "Arka plan pencere gizleyici aktif edildi."
         
         Start-Sleep -Seconds $seconds
