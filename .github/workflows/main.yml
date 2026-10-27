@@ -90,19 +90,24 @@ jobs:
             }
         }
 
-        # 2. GÖREV ÇUBUĞU İÇİN GEÇİCİ KISAYOLLAR OLUŞTUR (Garantili yol)
-        $tempPath = "C:\Temp"
-        if (!(Test-Path $tempPath)) { New-Item -ItemType Directory -Path $tempPath -Force | Out-Null }
+        # 2. GÖREV ÇUBUĞU İÇİN KESİN KISAYOLLAR
+        # Windows'un tam olarak beklediği Kullanıcı Sabitlenmiş klasörü
+        $taskbarDir = "C:\Users\runneradmin\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+        if (!(Test-Path $taskbarDir)) { New-Item -ItemType Directory -Path $taskbarDir -Force | Out-Null }
+        
+        # Klasörü temizle
+        Get-ChildItem -Path $taskbarDir -Filter *.lnk -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+
         $shell = New-Object -ComObject WScript.Shell
         
         # Explorer Kısayolu
-        $expLnk = "$tempPath\Explorer.lnk"
+        $expLnk = "$taskbarDir\File Explorer.lnk"
         $sc = $shell.CreateShortcut($expLnk)
         $sc.TargetPath = "C:\Windows\explorer.exe"
         $sc.Save()
 
         # Chrome Kısayolu
-        $chromeLnk = "$tempPath\Chrome.lnk"
+        $chromeLnk = "$taskbarDir\Google Chrome.lnk"
         $chromeExe = "C:\Program Files\Google\Chrome\Application\chrome.exe"
         if (Test-Path $chromeExe) {
             $sc = $shell.CreateShortcut($chromeLnk)
@@ -110,10 +115,11 @@ jobs:
             $sc.Save()
         }
 
-        # 3. XML OLUŞTUR VE ZORLA UYGULA
-        $xmlPath = "$tempPath\LayoutModification.xml"
+        # 3. XML OLUŞTUR (xmlns:taskbar EKLENDİ)
+        $xmlDir = "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Shell"
+        if (!(Test-Path $xmlDir)) { New-Item -ItemType Directory -Path $xmlDir -Force | Out-Null }
+        $xmlPath = "$xmlDir\LayoutModification.xml"
         
-        # YAML'ı bozmayan dizi tabanlı XML
         $xmlLines = @(
           '<?xml version="1.0" encoding="utf-8"?>',
           '<LayoutModificationTemplate xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" Version="1" xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification">',
@@ -125,7 +131,7 @@ jobs:
           '  </DefaultLayoutOverride>',
           '  <CustomTaskbarLayoutCollection PinListPlacement="Replace">',
           '    <defaultlayout:TaskbarLayout>',
-          '      <taskbar:TaskbarPinList>',
+          '      <taskbar:TaskbarPinList xmlns:taskbar="http://schemas.microsoft.com/Windows/2010/09/Taskbar">',
           "        <taskbar:DesktopApp DesktopApplicationLinkPath=`"$expLnk`" />",
           "        <taskbar:DesktopApp DesktopApplicationLinkPath=`"$chromeLnk`" />",
           '      </taskbar:TaskbarPinList>',
@@ -135,20 +141,16 @@ jobs:
         )
         $xmlLines | Set-Content -Path $xmlPath -Encoding UTF8
 
-        # 4. SİSTEME ZORLA TANIT (Kayıt Defteri Politikası)
+        # 4. SİSTEME ZORLA TANIT
         $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer"
         if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
         Set-ItemProperty -Path $regPath -Name "StartLayoutFile" -Value $xmlPath -Type String -Force
         
-        # 5. MEVCUT GÖREV ÇUBUĞU ÖNBELLEĞİNİ TEMİZLE
+        # 5. ÖNBELLEĞİ TEMİZLE VE YENİDEN BAŞLAT
         Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -Recurse -Force -ErrorAction SilentlyContinue
-        
-        # 6. EXPLORER'I YENİDEN BAŞLAT VE SİSTEMİ GÜNCELLE
         Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 3
         Start-Process explorer.exe
-        # Sistem parametrelerini güncelle (Politikaların anında okunması için)
-        rundll32.exe user32.dll,UpdatePerUserSystemParameters
         Start-Sleep -Seconds 3
 
     - name: Bağlantı Bilgilerini Göster ve Oturumu Açık Tut
