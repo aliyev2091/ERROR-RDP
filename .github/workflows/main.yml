@@ -91,34 +91,32 @@ jobs:
         }
 
         # 2. GÖREV ÇUBUĞUNU XML İLE SIFIRLA (Edge'yi zorla kaldırır)
-        $chromePath = (Get-Command chrome.exe -ErrorAction SilentlyContinue).Source
-        if (-not $chromePath) { $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe" }
-        
+        $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
         $xmlDir = "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Shell"
         if (!(Test-Path $xmlDir)) { New-Item -ItemType Directory -Path $xmlDir -Force | Out-Null }
         $xmlPath = "$xmlDir\LayoutModification.xml"
 
-        # Sadece Dosya Gezgini ve Chrome'u sabitleyen XML yapısı
-        $xmlContent = @"
-<?xml version="1.0" encoding="utf-8"?>
-<LayoutModificationTemplate xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" Version="1" xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification">
-  <LayoutOptions StartTileGroupCellWidth="6" />
-  <DefaultLayoutOverride>
-    <StartLayoutCollection>
-      <defaultlayout:StartLayout GroupCellWidth="6" />
-    </StartLayoutCollection>
-  </DefaultLayoutOverride>
-  <CustomTaskbarLayoutCollection PinListPlacement="Replace">
-    <defaultlayout:TaskbarLayout>
-      <taskbar:TaskbarPinList>
-        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\System Tools\File Explorer.lnk" />
-        <taskbar:DesktopApp DesktopApplicationLinkPath="$chromePath" />
-      </taskbar:TaskbarPinList>
-    </defaultlayout:TaskbarLayout>
-  </CustomTaskbarLayoutCollection>
-</LayoutModificationTemplate>
-"@
-        Set-Content -Path $xmlPath -Value $xmlContent -Encoding UTF8
+        # YAML'ı bozmayan dizi tabanlı XML oluşturma
+        $xmlLines = @(
+          '<?xml version="1.0" encoding="utf-8"?>',
+          '<LayoutModificationTemplate xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" Version="1" xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification">',
+          '  <LayoutOptions StartTileGroupCellWidth="6" />',
+          '  <DefaultLayoutOverride>',
+          '    <StartLayoutCollection>',
+          '      <defaultlayout:StartLayout GroupCellWidth="6" />',
+          '    </StartLayoutCollection>',
+          '  </DefaultLayoutOverride>',
+          '  <CustomTaskbarLayoutCollection PinListPlacement="Replace">',
+          '    <defaultlayout:TaskbarLayout>',
+          '      <taskbar:TaskbarPinList>',
+          '        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\System Tools\File Explorer.lnk" />',
+          "        <taskbar:DesktopApp DesktopApplicationLinkPath=`"$chromePath`" />",
+          '      </taskbar:TaskbarPinList>',
+          '    </defaultlayout:TaskbarLayout>',
+          '  </CustomTaskbarLayoutCollection>',
+          '</LayoutModificationTemplate>'
+        )
+        $xmlLines | Set-Content -Path $xmlPath -Encoding UTF8
 
         # Kayıt defterindeki eski çubuk ayarlarını sil ki Windows yeni XML'i okusun
         Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -Recurse -Force -ErrorAction SilentlyContinue
