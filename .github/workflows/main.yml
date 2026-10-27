@@ -82,39 +82,51 @@ jobs:
     - name: Masaüstünü ve Görev Çubuğunu Temizle
       shell: pwsh
       run: |
-        # 1. MASAÜSTÜNÜ TEMİZLE
+        # 1. MASAÜSTÜNÜ TEMİZLE (Chrome ve Çöp Kutusu kalsın)
         $desktopPaths = @("C:\Users\Public\Desktop", "C:\Users\runneradmin\Desktop")
         foreach ($path in $desktopPaths) {
             if (Test-Path $path) {
-                # Chrome dışındaki tüm .lnk (kısayol) dosyalarını sil
                 Get-ChildItem -Path $path -Filter *.lnk -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "Google Chrome" } | Remove-Item -Force -ErrorAction SilentlyContinue
             }
         }
 
-        # 2. GÖREV ÇUBUĞUNU TEMİZLE (Sadece Chrome ve Dosya Gezgini kalsın)
-        $taskbarPath = "C:\Users\runneradmin\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
-        if (Test-Path $taskbarPath) {
-            Get-ChildItem -Path $taskbarPath -Filter *.lnk -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-            
-            # Chrome ve Dosya Gezgini'ni Görev Çubuğuna Yeniden Sabitle
-            $shell = New-Object -ComObject WScript.Shell
-            $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
-            $explorerPath = "C:\Windows\explorer.exe"
+        # 2. GÖREV ÇUBUĞUNU XML İLE SIFIRLA (Edge'yi zorla kaldırır)
+        $chromePath = (Get-Command chrome.exe -ErrorAction SilentlyContinue).Source
+        if (-not $chromePath) { $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe" }
+        
+        $xmlDir = "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Shell"
+        if (!(Test-Path $xmlDir)) { New-Item -ItemType Directory -Path $xmlDir -Force | Out-Null }
+        $xmlPath = "$xmlDir\LayoutModification.xml"
 
-            if (Test-Path $chromePath) {
-                $shortcut = $shell.CreateShortcut("$taskbarPath\Google Chrome.lnk")
-                $shortcut.TargetPath = $chromePath
-                $shortcut.Save()
-            }
-            if (Test-Path $explorerPath) {
-                $shortcut = $shell.CreateShortcut("$taskbarPath\File Explorer.lnk")
-                $shortcut.TargetPath = $explorerPath
-                $shortcut.Save()
-            }
-        }
+        # Sadece Dosya Gezgini ve Chrome'u sabitleyen XML yapısı
+        $xmlContent = @"
+<?xml version="1.0" encoding="utf-8"?>
+<LayoutModificationTemplate xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" Version="1" xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification">
+  <LayoutOptions StartTileGroupCellWidth="6" />
+  <DefaultLayoutOverride>
+    <StartLayoutCollection>
+      <defaultlayout:StartLayout GroupCellWidth="6" />
+    </StartLayoutCollection>
+  </DefaultLayoutOverride>
+  <CustomTaskbarLayoutCollection PinListPlacement="Replace">
+    <defaultlayout:TaskbarLayout>
+      <taskbar:TaskbarPinList>
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\System Tools\File Explorer.lnk" />
+        <taskbar:DesktopApp DesktopApplicationLinkPath="$chromePath" />
+      </taskbar:TaskbarPinList>
+    </defaultlayout:TaskbarLayout>
+  </CustomTaskbarLayoutCollection>
+</LayoutModificationTemplate>
+"@
+        Set-Content -Path $xmlPath -Value $xmlContent -Encoding UTF8
 
+        # Kayıt defterindeki eski çubuk ayarlarını sil ki Windows yeni XML'i okusun
+        Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -Recurse -Force -ErrorAction SilentlyContinue
+        
         # Değişikliklerin uygulanması için Explorer'ı yeniden başlat
         Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 3
+        Start-Process explorer.exe
         Start-Sleep -Seconds 2
 
     - name: Bağlantı Bilgilerini Göster ve Oturumu Açık Tut
