@@ -50,13 +50,11 @@ jobs:
         Set-ItemProperty -Path $wsPath -Name "DWMFRAMEINTERVAL" -Value 15 -Type DWord -Force
         $rdpTcpPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
         Set-ItemProperty -Path $rdpTcpPath -Name "InteractiveDelay" -Value 0 -Type DWord -Force
-        
         $termddPath = "HKLM:\SYSTEM\CurrentControlSet\Services\TermDD"
         if (!(Test-Path $termddPath)) { New-Item -Path $termddPath -Force | Out-Null }
         Set-ItemProperty -Path $termddPath -Name "FlowControlDisable" -Value 0 -Type DWord -Force
         Set-ItemProperty -Path $termddPath -Name "FlowControlDisplayBandwidth" -Value 16 -Type DWord -Force
         Set-ItemProperty -Path $termddPath -Name "FlowControlChannelBandwidth" -Value 144 -Type DWord -Force
-
         $mmPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
         Set-ItemProperty -Path $mmPath -Name "SystemResponsiveness" -Value 0 -Type DWord -Force
         $lanmanPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
@@ -98,31 +96,17 @@ jobs:
         Write-Host "  Süre         : $hours saat"
         Write-Host "=================================================="
         
-        Write-Host "Konsol penceresi gizleniyor, lutfen bekleyin..."
-        Start-Sleep -Seconds 3 
+        Write-Host "Konsol penceresi kapatılıyor, oturum arka planda devam edecek..."
+        Start-Sleep -Seconds 2 # Logların okunması için kısa bir süre tanı
         
-        # === PENCERE GİZLEME (KESİN ÇÖZÜM) ===
-        $signature = @'
-        using System;
-        using System.Runtime.InteropServices;
-        public class Win32Hider {
-            [DllImport("user32.dll")]
-            public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-            [DllImport("user32.dll")]
-            public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-        }
-        '@
-        if (-not ("Win32Hider" -as [type])) { Add-Type -TypeDefinition $signature }
+        # === KESİN ÇÖZÜM: İŞLEMİ ARKA PLANA DEVRET VE ANA PENCEREYİ KAPAT ===
+        # 1. Arka planda gizli çalışacak komutu hazırla
+        $bgCommand = "Start-Sleep -Seconds $seconds"
         
-        # GitHub Runner sürecini bul
-        $runnerProcess = Get-Process -Name "hosted-compute-agent" -ErrorAction SilentlyContinue
-        if ($runnerProcess -and $runnerProcess.MainWindowHandle -ne 0) {
-            # 1. Pencereyi tamamen gizle (SW_HIDE)
-            [Win32Hider]::ShowWindow($runnerProcess.MainWindowHandle, 0) | Out-Null
-            # 2. Ekstra garanti: Pencereyi ekranın çok dışına (-32000, -32000) taşı
-            [Win32Hider]::SetWindowPos($runnerProcess.MainWindowHandle, [IntPtr]::Zero, -32000, -32000, 0, 0, 0x0001 -bor 0x0004) | Out-Null
-        }
-        # =====================================
-
-        # Bağlantıyı açık tut
-        Start-Sleep -Seconds $seconds
+        # 2. PowerShell'i gizli bir pencerede başlat (-WindowStyle Hidden)
+        # Bu komut, yeni bir süreç başlatır ve ana adımın bitmesini sağlar.
+        Start-Process powershell -ArgumentList "-NoProfile", "-WindowStyle", "Hidden", "-Command", $bgCommand -WindowStyle Hidden
+        
+        # 3. Ana betik burada biter. GitHub Actions adımı "başarılı" olarak işaretlenir
+        # ve bu adıma ait konsol penceresi otomatik olarak kapanır.
+        Write-Host "Arka plan süreci başlatıldı. Bu pencere kapanıyor..."
