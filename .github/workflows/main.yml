@@ -26,9 +26,6 @@ jobs:
         $cs = Get-CimInstance Win32_ComputerSystem
         $ramGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 2)
 
-        # Disk Bilgisi (WMI üzerinden arayüz tipini çekiyoruz)
-        $disks = Get-CimInstance Win32_DiskDrive
-
         Write-Host "=================================================="
         Write-Host "        SİSTEM DONANIM BİLGİLERİ"
         Write-Host "=================================================="
@@ -36,19 +33,33 @@ jobs:
         Write-Host "  CPU Hızı   : $cpuGhz GHz"
         Write-Host "  RAM Miktarı: $ramGB GB"
         Write-Host "--------------------------------------------------"
+        
+        # Gelişmiş Disk Bilgisi Sorgusu
+        $disks = Get-PhysicalDisk
         foreach ($disk in $disks) {
+            $name = $disk.FriendlyName
             $sizeGB = [math]::Round($disk.Size / 1GB, 2)
-            $interface = $disk.InterfaceType
-            $media = $disk.MediaType
+            $mediaType = $disk.MediaType
+            $busType = $disk.BusType
             
-            # Eğer WMI medya tipini tam veremezse, arayüz tipini (SAS/SCSI) ön plana çıkar
-            if ($media -match "Fixed hard disk media") {
-                $diskType = "HDD ($interface)"
-            } else {
-                $diskType = "$media ($interface)"
+            if ([string]::IsNullOrWhiteSpace($busType)) { $busType = "SCSI" }
+            if ([string]::IsNullOrWhiteSpace($mediaType)) { $mediaType = "Unspecified" }
+            
+            # Türkçe Tip Belirleme Mantığı
+            $typeStr = ""
+            # Eğer NVMe ise, model adında SSD/NVMe geçiyorsa veya MediaType SSD ise kesinlikle SSD'dir.
+            if ($busType -eq "NVMe" -or $name -match "NVMe|SSD" -or $mediaType -eq "SSD") {
+                $typeStr = "SSD ($busType)"
+            } 
+            # Eğer SAS/SCSI ise ve içinde SSD geçmiyorsa HDD'dir
+            elseif ($mediaType -eq "HDD" -or $busType -eq "SAS" -or $busType -eq "SCSI") {
+                $typeStr = "HDD ($busType)"
+            } 
+            else {
+                $typeStr = "$mediaType ($busType)"
             }
 
-            Write-Host "  Disk       : $($disk.Model) | Tip: $diskType | Boyut: $sizeGB GB"
+            Write-Host "  Disk       : $name | Tip: $typeStr | Boyut: $sizeGB GB"
         }
         Write-Host "=================================================="
 
